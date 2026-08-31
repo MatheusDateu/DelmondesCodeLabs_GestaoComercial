@@ -1,0 +1,126 @@
+﻿@page "/Admin/Plans"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Localization
+@using DelmondesCodeLabs_GestaoComercial.Resources
+
+@attribute [Authorize(Roles = "SuperUser")]
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Commercial Plans"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8 mb-16">
+    <MudText Typo="Typo.h3" Align="Align.Center" Color="Color.Primary" Style="font-weight: bold; margin-bottom: 8px;">
+        @StrLocalizer["Choose the Perfect Plan"]
+    </MudText>
+    <MudText Typo="Typo.subtitle1" Align="Align.Center" Class="text-muted mb-12">
+        @StrLocalizer["Scalable solutions tailored for your commercial management needs."]
+    </MudText>
+
+    <MudGrid Spacing="6" Justify="Justify.Center">
+        <!-- Super Plan -->
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="4" Style="height: 100%; border-top: 4px solid var(--mud-palette-info); border-radius: 8px;">
+                <MudCardHeader Class="pb-0">
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5" Align="Align.Center" Style="font-weight: bold;">@StrLocalizer["Super Plan"]</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent Class="d-flex flex-column align-center">
+                    <MudText Typo="Typo.h6" Style="text-decoration: line-through;" Color="Color.Default">R$ 1.000,00</MudText>
+                    <MudText Typo="Typo.h3" Color="Color.Info" Style="font-weight: bold;">R$ 500,00</MudText>
+                    <MudText Typo="Typo.caption" Class="mb-6">@StrLocalizer["One-time setup fee"]</MudText>
+
+                    <MudList T="string" Dense="true" Class="w-100">
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Installation and team training"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Hosting: Local server"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["1 establishment limit"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 3 Admins"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 7 Cashiers"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 20 Waiters"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Unlimited bug fixes (3 months)"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.AddCircleOutline" IconColor="Color.Primary">@StrLocalizer["+10h/month maintenance for R$ 150"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.AddCircleOutline" IconColor="Color.Primary">@StrLocalizer["Extra hour from R$ 60 to R$ 30"]</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions Class="justify-center pb-6">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Large" Style="font-weight: bold;">@StrLocalizer["Select Plan"]</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Lifetime Plan (Featured) -->
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="8" Style="height: 100%; border: 2px solid var(--mud-palette-primary); border-radius: 8px; transform: scale(1.05); z-index: 1;">
+                <MudCardHeader Class="pb-0" Style="background-color: var(--mud-palette-primary); color: #000000;">
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5" Align="Align.Center" Style="font-weight: bold;">@StrLocalizer["Lifetime Plan"]</MudText>
+                        <MudText Typo="Typo.caption" Align="Align.Center" Class="d-block">@StrLocalizer["Most Popular"]</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent Class="d-flex flex-column align-center mt-4">
+                    <MudText Typo="Typo.h6" Style="text-decoration: line-through;" Color="Color.Default">R$ 9.000,00</MudText>
+                    <MudText Typo="Typo.h3" Color="Color.Primary" Style="font-weight: bold;">R$ 3.000,00</MudText>
+                    <MudText Typo="Typo.caption" Class="mb-6">@StrLocalizer["One-time setup fee"]</MudText>
+
+                    <MudList T="string" Dense="true" Class="w-100">
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Installation and team training"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Hosting: Local servers"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 3 establishments"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 3 Super Users"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 9 Admins"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 21 Cashiers"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Up to 60 Waiters"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">@StrLocalizer["Unlimited bug fixes (3 months)"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Star" IconColor="Color.Warning"><strong>@StrLocalizer["Source code provided"]</strong></MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.AddCircleOutline" IconColor="Color.Primary">@StrLocalizer["+30h/month maintenance for R$ 250 (3 months)"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.AddCircleOutline" IconColor="Color.Primary">@StrLocalizer["Extra hour from R$ 60 to R$ 30"]</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions Class="justify-center pb-6">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Style="font-weight: bold; color: #000000;">@StrLocalizer["Select Lifetime"]</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Custom Plan -->
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="4" Style="height: 100%; border-top: 4px solid var(--mud-palette-secondary); border-radius: 8px;">
+                <MudCardHeader Class="pb-0">
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h5" Align="Align.Center" Style="font-weight: bold;">@StrLocalizer["Custom Plan"]</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent Class="d-flex flex-column align-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Handshake" Color="Color.Secondary" Style="font-size: 3rem; margin-top: 8px;" />
+                    <MudText Typo="Typo.h4" Color="Color.Secondary" Class="mt-2" Style="font-weight: bold;">@StrLocalizer["On Demand"]</MudText>
+                    <MudText Typo="Typo.caption" Class="mb-6">@StrLocalizer["Tailored pricing"]</MudText>
+
+                    <MudList T="string" Dense="true" Class="w-100">
+                        <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Default">@StrLocalizer["Custom Hosting & Domains"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Default">@StrLocalizer["Custom establishments limit"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Default">@StrLocalizer["Custom user roles limit"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Default">@StrLocalizer["Custom bug fixes terms"]</MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Settings" IconColor="Color.Default">@StrLocalizer["Custom maintenance hours"]</MudListItem>
+                    </MudList>
+                </MudCardContent>
+                <MudCardActions Class="justify-center pb-6 mt-auto">
+                    <MudButton Href="mailto:contato@delmondescodelabs.dpdns.org" Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Large" Style="font-weight: bold;">@StrLocalizer["Contact Us"]</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the component.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+    #endregion Lifecycle
+
+}

@@ -1,0 +1,65 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <PageTitle>Delmondes CodeLabs - Gestão Comercial</PageTitle>
+    <base href="/" />
+    <ResourcePreloader />
+    <!-- PWA Manifest & Native App Feel Capabilities -->
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#03fa6e" />
+
+    <!-- iOS Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Gestão PDV" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
+
+    <!-- Default Stylesheets -->
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["DelmondesCodeLabs_GestaoComercial.styles.css"]" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <ImportMap />
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+
+<body>
+    <Routes @rendermode="PageRenderMode" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="@Assets["Components/Account/Shared/PasskeySubmit.razor.js"]" type="module"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+
+    <!-- Free QR Code Generator Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+            window.addEventListener('load', () => {
+                const qrContainer = document.querySelector('[data-url]');
+                if (qrContainer) {
+                    new QRCode(qrContainer, {
+                        text: qrContainer.getAttribute('data-url'),
+                        width: 150,
+                        height: 150,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                }
+            });
+    </script>
+</body>
+
+</html>
+
+@code {
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.AcceptsInteractiveRouting() ? InteractiveServer : null;
+    #endregion Properties
+}

@@ -1,0 +1,149 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+
+@inject IProductCompositionQueries CompositionQueries
+@inject IProductCompositionRepository CompositionRepository
+@inject IProductQueries ProductQueries
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-4 flex-wrap">
+            <MudSelect T="Guid" @bind-Value="_selectedComponentId" Label="@StrLocalizer["Component"]" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" Class="flex-grow-1">
+                <MudSelectItem T="Guid" Value="@Guid.Empty">@StrLocalizer["Select a component"]</MudSelectItem>
+                @if (_availableComponents is not null)
+                {
+                    @foreach (var comp in _availableComponents)
+                    {
+                        <MudSelectItem T="Guid" Value="@comp.Id">@comp.Name</MudSelectItem>
+                    }
+                }
+            </MudSelect>
+            <MudNumericField @bind-Value="_quantityToAdd" Label="@StrLocalizer["Quantity"]" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0.001m" Format="N3" Required="true" Style="width: 120px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddComponentAsync" Style="color: #000000; font-weight: bold; height: 40px;">
+                @StrLocalizer["Add"].ToString().ToUpper()
+            </MudButton>
+        </MudStack>
+
+        <MudTable Items="@_compositions" Dense="true" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
+            <HeaderContent>
+                <MudTh>@StrLocalizer["Component"]</MudTh>
+                <MudTh>@StrLocalizer["Quantity"]</MudTh>
+                <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="composition">
+                <MudTd DataLabel="@StrLocalizer["Component"]">@composition.ChildProduct?.Name</MudTd>
+                <MudTd DataLabel="@StrLocalizer["Quantity"]">@composition.Quantity.ToString("N3")</MudTd>
+                <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveComponentAsync(composition))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Class="pa-4 text-center">@StrLocalizer["No components added yet."]</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Variant="Variant.Text">@StrLocalizer["Close"].ToString().ToUpper()</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Fields
+    private IEnumerable<ProductComposition> _compositions = new List<ProductComposition>();
+    private IEnumerable<Product>? _availableComponents;
+    private Guid _selectedComponentId = Guid.Empty;
+    private decimal _quantityToAdd = 1m;
+    #endregion Fields
+
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Product ParentProduct { get; set; } = default!;
+    #endregion Parameters
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the dialogue by loading the current composition and available components.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    /// <summary>
+    /// Loads the existing composition links and the pool of available component products.
+    /// </summary>
+    private async Task LoadDataAsync()
+    {
+        _compositions = await CompositionQueries.GetByParentProductIdAsync(ParentProduct.Id);
+
+        PagedResult<Product> paginated = await ProductQueries.SearchProductsAsync(null, 1, 10000);
+        _availableComponents = paginated.Items.Where(p => p.Type == ProductType.Component);
+    }
+
+    /// <summary>
+    /// Adds a new component to the parent product's composition.
+    /// </summary>
+    private async Task AddComponentAsync()
+    {
+        if (_selectedComponentId == Guid.Empty)
+        {
+            Snackbar.Add(StrLocalizer["Please select a valid component."], Severity.Warning);
+            return;
+        }
+
+        if (_quantityToAdd <= 0)
+        {
+            Snackbar.Add(StrLocalizer["Quantity must be greater than zero."], Severity.Warning);
+            return;
+        }
+
+        if (_compositions.Any(c => c.ChildProductId == _selectedComponentId))
+        {
+            Snackbar.Add(StrLocalizer["This component is already in the composition."], Severity.Warning);
+            return;
+        }
+
+        ProductComposition newComposition = new ProductComposition
+        {
+            ParentProductId = ParentProduct.Id,
+            ChildProductId = _selectedComponentId,
+            Quantity = _quantityToAdd
+        };
+
+        await CompositionRepository.AddAsync(newComposition);
+        Snackbar.Add(StrLocalizer["Component added successfully."], Severity.Success);
+
+        _selectedComponentId = Guid.Empty;
+        _quantityToAdd = 1m;
+        await LoadDataAsync();
+    }
+
+    /// <summary>
+    /// Removes an existing component from the parent product's composition.
+    /// </summary>
+    private async Task RemoveComponentAsync(ProductComposition composition)
+    {
+        await CompositionRepository.DeleteAsync(composition);
+        Snackbar.Add(StrLocalizer["Component removed successfully."], Severity.Success);
+        await LoadDataAsync();
+    }
+
+    /// <summary>
+    /// Closes the dialogue.
+    /// </summary>
+    private void Close()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+    #endregion Methods
+
+}

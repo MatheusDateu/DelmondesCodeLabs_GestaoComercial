@@ -1,0 +1,133 @@
+﻿@page "/Account/Manage"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Profile"] - Delmondes CodeLabs</PageTitle>
+
+<MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Style="font-weight: bold;">@StrLocalizer["Profile Details"]</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    <MudCardContent>
+        <StatusMessage />
+
+        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+            <DataAnnotationsValidator />
+
+            <MudGrid>
+                <MudItem xs="12" md="8">
+                    <!-- Username (Now Editable) -->
+                    <div class="mud-native-input-control">
+                        <label class="mud-native-label">@StrLocalizer["Username"]</label>
+                        <InputText @bind-Value="Input.Username" type="text" class="mud-native-input" />
+                        <ValidationMessage For="() => Input.Username" class="mud-native-error" />
+                    </div>
+
+                    <!-- Phone Number -->
+                    <div class="mud-native-input-control">
+                        <label class="mud-native-label">@StrLocalizer["Phone Number"]</label>
+                        <InputText @bind-Value="Input.PhoneNumber" type="tel" class="mud-native-input" />
+                        <ValidationMessage For="() => Input.PhoneNumber" class="mud-native-error" />
+                    </div>
+
+                    <button type="submit" class="mud-native-btn">
+                        @StrLocalizer["Save Changes"]
+                    </button>
+                </MudItem>
+            </MudGrid>
+        </EditForm>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    #region Fields
+    private ApplicationUser? user;
+    private string? username;
+    private string? phoneNumber;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        username = await UserManager.GetUserNameAsync(user);
+        phoneNumber = await UserManager.GetPhoneNumberAsync(user);
+
+        Input.Username ??= username;
+        Input.PhoneNumber ??= phoneNumber;
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnValidSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        if (Input.Username != username)
+        {
+            IdentityResult setUsernameResult = await UserManager.SetUserNameAsync(user, Input.Username);
+            if (!setUsernameResult.Succeeded)
+            {
+                RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["Failed to set username."]}", HttpContext);
+                return;
+            }
+        }
+
+        if (Input.PhoneNumber != phoneNumber)
+        {
+            IdentityResult setPhoneResult = await UserManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
+            if (!setPhoneResult.Succeeded)
+            {
+                RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["Failed to set phone number."]}", HttpContext);
+                return;
+            }
+        }
+
+        await SignInManager.RefreshSignInAsync(user);
+        RedirectManager.RedirectToCurrentPageWithStatus(StrLocalizer["Your profile has been updated."], HttpContext);
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "O nome de usuário é obrigatório.")]
+        public string? Username { get; set; }
+
+        [Phone(ErrorMessage = "O número de telefone é inválido.")]
+        public string? PhoneNumber { get; set; }
+    }
+    #endregion Models
+
+}

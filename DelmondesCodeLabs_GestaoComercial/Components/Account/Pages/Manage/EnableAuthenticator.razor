@@ -1,0 +1,202 @@
+﻿@page "/Account/Manage/EnableAuthenticator"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject UrlEncoder UrlEncoder
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<EnableAuthenticator> Logger
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Configure Authenticator"] - Delmondes CodeLabs</PageTitle>
+
+@if (recoveryCodes is not null)
+{
+    <ShowRecoveryCodes RecoveryCodes="recoveryCodes.ToArray()" StatusMessage="@message" />
+}
+else
+{
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5" Style="font-weight: bold;">@StrLocalizer["Configure Authenticator App"]</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+
+        <MudCardContent>
+            <StatusMessage Message="@message" />
+
+            <MudText Typo="Typo.body1" Class="mb-4">@StrLocalizer["To use an authenticator app go through the following steps:"]</MudText>
+
+            <MudText Typo="Typo.body1" Class="mb-2">
+                <strong>1.</strong> @StrLocalizer["Download a two-factor authenticator app like Microsoft Authenticator or Google Authenticator for Android and iOS."]
+            </MudText>
+
+            <MudText Typo="Typo.body1" Class="mb-2">
+                <strong>2.</strong> @StrLocalizer["Scan the QR Code or enter this key"] <MudText Color="Color.Primary" Inline="true" Style="font-family: monospace; font-weight: bold; background: #000; padding: 2px 6px; border-radius: 4px;">@sharedKey</MudText> @StrLocalizer["into your two factor authenticator app. Spaces and casing do not matter."]
+            </MudText>
+
+            <MudAlert Severity="Severity.Info" Class="mb-4 mt-2">
+                @StrLocalizer["Learn how to"] <MudLink Href="https://go.microsoft.com/fwlink/?Linkid=852423" Underline="Underline.Always">@StrLocalizer["enable QR code generation"]</MudLink>.
+            </MudAlert>
+
+            <div data-url="@authenticatorUri" class="mb-6"></div>
+
+            <MudText Typo="Typo.body1" Class="mb-4">
+                <strong>3.</strong> @StrLocalizer["Once you have scanned the QR code or input the key above, your two factor authentication app will provide you with a unique code. Enter the code in the confirmation box below."]
+            </MudText>
+
+            <EditForm Model="Input" FormName="send-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <DataAnnotationsValidator />
+
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <div class="mud-native-input-control">
+                            <label class="mud-native-label">@StrLocalizer["Verification Code"]</label>
+                            <InputText @bind-Value="Input.Code" type="text" autocomplete="off" class="mud-native-input" />
+                            <ValidationMessage For="() => Input.Code" class="mud-native-error" />
+                        </div>
+
+                        <button type="submit" class="mud-native-btn">
+                            @StrLocalizer["VERIFY"].ToString().ToUpper()
+                        </button>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    #region Constants
+    private const string AuthenticatorUriFormat = "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6";
+    #endregion Constants
+
+    #region Fields
+    private string? message;
+    private ApplicationUser? user;
+    private string? sharedKey;
+    private string? authenticatorUri;
+    private IEnumerable<string>? recoveryCodes;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        await LoadSharedKeyAndQrCodeUriAsync(user);
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnValidSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        string verificationCode = Input.Code.Replace(" ", string.Empty).Replace("-", string.Empty);
+
+        bool is2faTokenValid = await UserManager.VerifyTwoFactorTokenAsync(
+            user, UserManager.Options.Tokens.AuthenticatorTokenProvider, verificationCode);
+
+        if (!is2faTokenValid)
+        {
+            message = $"{StrLocalizer["Error"]}: {StrLocalizer["Verification code is invalid."]}";
+            return;
+        }
+
+        await UserManager.SetTwoFactorEnabledAsync(user, true);
+        string userId = await UserManager.GetUserIdAsync(user);
+        Logger.LogInformation("User with ID '{UserId}' has enabled 2FA with an authenticator app.", userId);
+
+        message = StrLocalizer["Your authenticator app has been verified."];
+
+        if (await UserManager.CountRecoveryCodesAsync(user) == 0)
+        {
+            recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+        }
+        else
+        {
+            RedirectManager.RedirectToWithStatus("Account/Manage/TwoFactorAuthentication", message, HttpContext);
+        }
+    }
+
+    private async ValueTask LoadSharedKeyAndQrCodeUriAsync(ApplicationUser user)
+    {
+        string? unformattedKey = await UserManager.GetAuthenticatorKeyAsync(user);
+        if (string.IsNullOrEmpty(unformattedKey))
+        {
+            await UserManager.ResetAuthenticatorKeyAsync(user);
+            unformattedKey = await UserManager.GetAuthenticatorKeyAsync(user);
+        }
+
+        sharedKey = FormatKey(unformattedKey!);
+        string? email = await UserManager.GetEmailAsync(user);
+        authenticatorUri = GenerateQrCodeUri(email!, unformattedKey!);
+    }
+
+    private string FormatKey(string unformattedKey)
+    {
+        StringBuilder result = new StringBuilder();
+        int currentPosition = 0;
+
+        while (currentPosition + 4 < unformattedKey.Length)
+        {
+            result.Append(unformattedKey.AsSpan(currentPosition, 4)).Append(' ');
+            currentPosition += 4;
+        }
+        if (currentPosition < unformattedKey.Length)
+        {
+            result.Append(unformattedKey.AsSpan(currentPosition));
+        }
+
+        return result.ToString().ToLowerInvariant();
+    }
+
+    private string GenerateQrCodeUri(string email, string unformattedKey)
+    {
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            AuthenticatorUriFormat,
+            UrlEncoder.Encode("Microsoft.AspNetCore.Identity.UI"),
+            UrlEncoder.Encode(email),
+            unformattedKey);
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "O código de verificação é obrigatório.")]
+        [StringLength(7, ErrorMessage = "O código deve ter pelo menos {2} e no máximo {1} caracteres.", MinimumLength = 6)]
+        [DataType(DataType.Text)]
+        public string Code { get; set; } = string.Empty;
+    }
+    #endregion Models
+
+}

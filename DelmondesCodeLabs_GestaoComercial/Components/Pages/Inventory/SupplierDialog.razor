@@ -1,0 +1,96 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+
+@inject ISupplierRepository SupplierRepository
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Model" OnValidSubmit="OnValidSubmitAsync" id="supplierForm" FormName="SupplierForm">
+            <DataAnnotationsValidator />
+
+            <MudTextField @bind-Value="Model.Name"
+                          For="@(() => Model.Name)"
+                          Label="@StrLocalizer["Supplier Name"]"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          Class="mb-3" />
+
+            <MudTextField @bind-Value="Model.Cnpj"
+                          For="@(() => Model.Cnpj)"
+                          Label="@StrLocalizer["CNPJ"]"
+                          Variant="Variant.Outlined"
+                          Mask="@(new PatternMask("00.000.000/0000-00"))"
+                          Class="mb-3" />
+
+            <MudGrid Class="mb-1" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Model.ContactEmail"
+                                  For="@(() => Model.ContactEmail)"
+                                  Label="@StrLocalizer["Email"]"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Email" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Model.ContactPhone"
+                                  For="@(() => Model.ContactPhone)"
+                                  Label="@StrLocalizer["Phone"]"
+                                  Variant="Variant.Outlined"
+                                  Mask="@(new PatternMask("(00) 00000-0000"))" />
+                </MudItem>
+            </MudGrid>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@StrLocalizer["Cancel"].ToString().ToUpper()</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" ButtonType="ButtonType.Submit" form="supplierForm" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Save"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Supplier Model { get; set; } = new();
+
+    [Parameter]
+    public bool IsEditing { get; set; }
+    #endregion Parameters
+
+    #region Methods
+    /// <summary>
+    /// Processes the submission of the supplier form, delegating to the appropriate repository command.
+    /// </summary>
+    private async Task OnValidSubmitAsync()
+    {
+        Model.ContactEmail = Model.ContactEmail?.ToLower();
+        if (IsEditing)
+        {
+            await SupplierRepository.UpdateAsync(Model);
+            Snackbar.Add(StrLocalizer["Supplier updated successfully."], Severity.Success);
+        }
+        else
+        {
+            await SupplierRepository.AddAsync(Model);
+            Snackbar.Add(StrLocalizer["Supplier created successfully."], Severity.Success);
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Cancels the operation and closes the dialogue without saving.
+    /// </summary>
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    #endregion Methods
+
+}

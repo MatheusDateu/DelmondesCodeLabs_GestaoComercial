@@ -1,0 +1,199 @@
+﻿@page "/inventory/suppliers"
+@attribute [Authorize(Roles = "SuperUser, Admin")]
+
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+
+@inject ISupplierQueries SupplierQueries
+@inject ISupplierRepository SupplierRepository
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Suppliers"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-6 px-2 flex-wrap">
+        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;">
+            @StrLocalizer["Suppliers"]
+        </MudText>
+
+        <MudSpacer />
+
+        @if (_selectedItems?.Any() == true)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="DeleteSelectedSuppliersAsync" StartIcon="@Icons.Material.Filled.DeleteSweep" Style="font-weight: bold;">
+                @StrLocalizer["Delete"].ToString().ToUpper() (@_selectedItems.Count)
+            </MudButton>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialogAsync" Style="color: #000000; font-weight: bold;" StartIcon="@Icons.Material.Filled.Add">
+            @StrLocalizer["New Supplier"].ToString().ToUpper()
+        </MudButton>
+    </MudStack>
+
+    <MudTable ServerData="LoadServerDataAsync" MultiSelection="true" @bind-SelectedItems="_selectedItems" Dense="true" Hover="true" @ref="_table" Elevation="4" Style="border-top: 4px solid #03fa6e; border-radius: 8px;" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="true">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField T="string" MaxLength="100" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@StrLocalizer["Search suppliers..."]" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+        </ToolBarContent>
+
+        <HeaderContent>
+            <MudTh>@StrLocalizer["Name"]</MudTh>
+            <MudTh>@StrLocalizer["CNPJ"]</MudTh>
+            <MudTh>@StrLocalizer["Email"]</MudTh>
+            <MudTh>@StrLocalizer["Phone"]</MudTh>
+            <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="supplier">
+            <MudTd DataLabel="@StrLocalizer["Name"]" Style="font-weight: bold;">@supplier.Name</MudTd>
+            <MudTd DataLabel="@StrLocalizer["CNPJ"]">@supplier.Cnpj</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Email"]">@supplier.ContactEmail</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Phone"]">@supplier.ContactPhone</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenEditDialogAsync(supplier))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteSupplierAsync(supplier))" />
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            <MudText>@StrLocalizer["No suppliers found matching your search."]</MudText>
+        </NoRecordsContent>
+
+        <LoadingContent>
+            <MudText>@StrLocalizer["Loading catalog..."]</MudText>
+        </LoadingContent>
+
+        <PagerContent>
+            <MudTablePager RowsPerPageString="@StrLocalizer["Rows per page:"]"
+                           InfoFormat="@StrLocalizer["{first_item}-{last_item} of {all_items}"]"
+                           AllItemsText="@StrLocalizer["All"]" />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    #region Fields
+    private MudTable<Supplier> _table = default!;
+    private string? _searchString;
+    private HashSet<Supplier> _selectedItems = new();
+    #endregion Fields
+
+    #region Methods
+    /// <summary>
+    /// Executes the server-side pagination and full-text search against the Dapper queries infrastructure.
+    /// </summary>
+    private async Task<TableData<Supplier>> LoadServerDataAsync(TableState state, CancellationToken cancellationToken)
+    {
+        int page = state.Page + 1;
+        int pageSize = state.PageSize;
+
+        PagedResult<Supplier> result = await SupplierQueries.GetPaginatedAsync(_searchString, page, pageSize, cancellationToken);
+
+        return new TableData<Supplier>()
+        {
+            TotalItems = result.TotalCount,
+            Items = result.Items
+        };
+    }
+
+    /// <summary>
+    /// Triggers a table reload when the user types in the search bar or clears it.
+    /// </summary>
+    private async Task OnSearchAsync(string text)
+    {
+        _searchString = string.IsNullOrWhiteSpace(text) ? null : text;
+        await _table.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Instantiates and displays the supplier dialogue for creating a new record.
+    /// </summary>
+    private async Task OpenCreateDialogAsync()
+    {
+        DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Small };
+        DialogParameters parameters = new DialogParameters
+        {
+            { "IsEditing", false },
+            { "Model", new Supplier() }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<SupplierDialog>(StrLocalizer["New Supplier"], parameters, options);
+        DialogResult result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Instantiates and displays the supplier dialogue populated with an existing record for editing.
+    /// </summary>
+    private async Task OpenEditDialogAsync(Supplier supplier)
+    {
+        DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Small };
+        DialogParameters parameters = new DialogParameters
+        {
+            { "IsEditing", true },
+            { "Model", supplier }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<SupplierDialog>(StrLocalizer["Edit Supplier"], parameters, options);
+        DialogResult result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and soft-deletes the specified supplier record.
+    /// </summary>
+    private async Task DeleteSupplierAsync(Supplier supplier)
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Delete Supplier"],
+            $"{StrLocalizer["Are you sure you want to delete the supplier"]} '{supplier.Name}'?",
+            yesText: StrLocalizer["Delete"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Cancel"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            await SupplierRepository.DeleteAsync(supplier);
+            _selectedItems.Remove(supplier);
+            Snackbar.Add(StrLocalizer["Supplier deleted successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and bulk soft-deletes all selected suppliers.
+    /// </summary>
+    private async Task DeleteSelectedSuppliersAsync()
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Bulk Delete"],
+            $"{StrLocalizer["Are you sure you want to delete the selected suppliers"]} {_selectedItems.Count}?",
+            yesText: StrLocalizer["Delete All"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Cancel"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            foreach (Supplier supplier in _selectedItems)
+            {
+                await SupplierRepository.DeleteAsync(supplier);
+            }
+
+            _selectedItems.Clear();
+            Snackbar.Add(StrLocalizer["Selected suppliers deleted successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+    #endregion Methods
+
+}

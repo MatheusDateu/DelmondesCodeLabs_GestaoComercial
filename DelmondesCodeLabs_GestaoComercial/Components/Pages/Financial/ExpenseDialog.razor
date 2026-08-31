@@ -1,0 +1,157 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Localization
+
+@inject IExpenseRepository ExpenseRepository
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Model" OnValidSubmit="OnValidSubmitAsync" id="expenseForm" FormName="ExpenseForm">
+            <DataAnnotationsValidator />
+
+            <MudTextField @bind-Value="Model.Description"
+                          For="@(() => Model.Description)"
+                          Label="@StrLocalizer["Description"]"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          Class="mb-3" />
+
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="Model.Amount"
+                                     For="@(() => Model.Amount)"
+                                     Label="@StrLocalizer["Amount"]"
+                                     Variant="Variant.Outlined"
+                                     Format="N2"
+                                     Required="true"
+                                     Min="0m" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="Model.Category"
+                               For="@(() => Model.Category)"
+                               Label="@StrLocalizer["Category"]"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               Direction="Direction.Bottom"
+                               OffsetY="true">
+                        @foreach (ExpenseCategory cat in Enum.GetValues<ExpenseCategory>())
+                        {
+                            <MudSelectItem Value="@cat">@StrLocalizer[cat.ToString()]</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_dueDate"
+                                   Label="@StrLocalizer["Due Date"]"
+                                   Variant="Variant.Outlined"
+                                   Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6" Class="d-flex align-center">
+                    <MudSwitch @bind-Value="Model.IsPaid" Color="Color.Success" Label="@StrLocalizer["Is Paid?"]" />
+                </MudItem>
+            </MudGrid>
+
+            @if (Model.IsPaid)
+            {
+                <MudGrid Class="mb-1" Spacing="2">
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_paymentDate"
+                                       Label="@StrLocalizer["Payment Date"]"
+                                       Variant="Variant.Outlined"
+                                       Required="true" />
+                    </MudItem>
+                </MudGrid>
+            }
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@StrLocalizer["Cancel"].ToString().ToUpper()</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" ButtonType="ButtonType.Submit" form="expenseForm" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Save"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Fields
+    private DateTime? _dueDate = DateTime.Today;
+    private DateTime? _paymentDate = DateTime.Today;
+    #endregion Fields
+
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Expense Model { get; set; } = new();
+
+    [Parameter]
+    public bool IsEditing { get; set; }
+    #endregion Parameters
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the component state, mapping DateTimeOffset from the domain to DateTime? for MudBlazor components.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        if (IsEditing)
+        {
+            _dueDate = Model.DueDate.DateTime;
+            _paymentDate = Model.PaymentDate?.DateTime;
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    /// <summary>
+    /// Processes the submission of the expense form, delegating to the appropriate repository command.
+    /// </summary>
+    private async Task OnValidSubmitAsync()
+    {
+        // Map dates back to DateTimeOffset
+        Model.DueDate = _dueDate.HasValue
+            ? new DateTimeOffset(_dueDate.Value.ToUniversalTime())
+            : DateTimeOffset.UtcNow;
+
+        if (Model.IsPaid)
+        {
+            Model.PaymentDate = _paymentDate.HasValue
+                ? new DateTimeOffset(_paymentDate.Value.ToUniversalTime())
+                : DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            Model.PaymentDate = null;
+        }
+
+        if (IsEditing)
+        {
+            await ExpenseRepository.UpdateAsync(Model);
+            Snackbar.Add(StrLocalizer["Expense updated successfully."], Severity.Success);
+        }
+        else
+        {
+            await ExpenseRepository.AddAsync(Model);
+            Snackbar.Add(StrLocalizer["Expense registered successfully."], Severity.Success);
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Cancels the operation and closes the dialogue without saving.
+    /// </summary>
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    #endregion Methods
+
+}

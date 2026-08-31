@@ -1,0 +1,212 @@
+﻿@page "/financial/expenses"
+@attribute [Authorize(Roles = "SuperUser, Admin")]
+
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+
+@inject IExpenseQueries ExpenseQueries
+@inject IExpenseRepository ExpenseRepository
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Expenses"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-6 px-2 flex-wrap">
+        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;">
+            @StrLocalizer["Expenses"]
+        </MudText>
+
+        <MudSpacer />
+
+        @if (_selectedItems?.Any() == true)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="DeleteSelectedExpensesAsync" StartIcon="@Icons.Material.Filled.DeleteSweep" Style="font-weight: bold;">
+                @StrLocalizer["Delete"].ToString().ToUpper() (@_selectedItems.Count)
+            </MudButton>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialogAsync" Style="color: #000000; font-weight: bold;" StartIcon="@Icons.Material.Filled.Add">
+            @StrLocalizer["New Expense"].ToString().ToUpper()
+        </MudButton>
+    </MudStack>
+
+    <MudTable ServerData="LoadServerDataAsync" MultiSelection="true" @bind-SelectedItems="_selectedItems" Dense="true" Hover="true" @ref="_table" Elevation="4" Style="border-top: 4px solid #03fa6e; border-radius: 8px;" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="true">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField T="string" MaxLength="100" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@StrLocalizer["Search expenses..."]" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+        </ToolBarContent>
+
+        <HeaderContent>
+            <MudTh>@StrLocalizer["Description"]</MudTh>
+            <MudTh>@StrLocalizer["Category"]</MudTh>
+            <MudTh>@StrLocalizer["Due Date"]</MudTh>
+            <MudTh>@StrLocalizer["Amount"]</MudTh>
+            <MudTh>@StrLocalizer["Status"]</MudTh>
+            <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="expense">
+            <MudTd DataLabel="@StrLocalizer["Description"]" Style="font-weight: bold;">@expense.Description</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Category"]">@StrLocalizer[expense.Category.ToString()]</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Due Date"]">@expense.DueDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Amount"]">@expense.Amount.ToString("C")</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Status"]">
+                @if (expense.IsPaid)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">@StrLocalizer["Paid"]</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@(expense.DueDate < DateTimeOffset.UtcNow ? Color.Error : Color.Warning)" Variant="Variant.Filled">
+                        @StrLocalizer["Pending"]
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenEditDialogAsync(expense))" title="@StrLocalizer["Edit"]" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeleteExpenseAsync(expense))" title="@StrLocalizer["Delete"]" />
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            <MudText>@StrLocalizer["No expenses found matching your search."]</MudText>
+        </NoRecordsContent>
+
+        <LoadingContent>
+            <MudText>@StrLocalizer["Loading..."]</MudText>
+        </LoadingContent>
+
+        <PagerContent>
+            <MudTablePager RowsPerPageString="@StrLocalizer["Rows per page:"]"
+                           InfoFormat="@StrLocalizer["{first_item}-{last_item} of {all_items}"]"
+                           AllItemsText="@StrLocalizer["All"]" />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    #region Fields
+    private MudTable<Expense> _table = default!;
+    private string? _searchString;
+    private HashSet<Expense> _selectedItems = new();
+    #endregion Fields
+
+    #region Methods
+    /// <summary>
+    /// Executes the server-side pagination and full-text search against the Dapper queries infrastructure.
+    /// </summary>
+    private async Task<TableData<Expense>> LoadServerDataAsync(TableState state, CancellationToken cancellationToken)
+    {
+        int page = state.Page + 1;
+        int pageSize = state.PageSize;
+
+        PagedResult<Expense> result = await ExpenseQueries.GetPaginatedAsync(_searchString, page, pageSize, cancellationToken);
+
+        return new TableData<Expense>()
+        {
+            TotalItems = result.TotalCount,
+            Items = result.Items
+        };
+    }
+
+    /// <summary>
+    /// Triggers a table reload when the user types in the search bar.
+    /// </summary>
+    private async Task OnSearchAsync(string text)
+    {
+        _searchString = string.IsNullOrWhiteSpace(text) ? null : text;
+        await _table.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Instantiates and displays the expense dialogue for creating a new record.
+    /// </summary>
+    private async Task OpenCreateDialogAsync()
+    {
+        DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Small };
+        DialogParameters parameters = new DialogParameters
+        {
+            { "IsEditing", false },
+            { "Model", new Expense() }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<ExpenseDialog>(StrLocalizer["New Expense"], parameters, options);
+        DialogResult result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Instantiates and displays the expense dialogue populated with an existing record for editing.
+    /// </summary>
+    private async Task OpenEditDialogAsync(Expense expense)
+    {
+        DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Small };
+        DialogParameters parameters = new DialogParameters
+        {
+            { "IsEditing", true },
+            { "Model", expense }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<ExpenseDialog>(StrLocalizer["Edit Expense"], parameters, options);
+        DialogResult result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and soft-deletes the specified expense record.
+    /// </summary>
+    private async Task DeleteExpenseAsync(Expense expense)
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Delete Expense"],
+            $"{StrLocalizer["Are you sure you want to delete the expense"]} '{expense.Description}'?",
+            yesText: StrLocalizer["Delete"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Cancel"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            await ExpenseRepository.DeleteAsync(expense);
+            _selectedItems.Remove(expense);
+            Snackbar.Add(StrLocalizer["Expense deleted successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and bulk soft-deletes all selected expenses.
+    /// </summary>
+    private async Task DeleteSelectedExpensesAsync()
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Bulk Delete"],
+            $"{StrLocalizer["Are you sure you want to delete the selected expenses"]} {_selectedItems.Count}?",
+            yesText: StrLocalizer["Delete All"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Cancel"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            foreach (Expense expense in _selectedItems)
+            {
+                await ExpenseRepository.DeleteAsync(expense);
+            }
+
+            _selectedItems.Clear();
+            Snackbar.Add(StrLocalizer["Selected expenses deleted successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+    #endregion Methods
+
+}

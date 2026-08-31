@@ -1,0 +1,95 @@
+﻿@page "/Account/RegisterConfirmation"
+
+@using System.Text
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Registration Confirmation"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardContent Class="d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Style="font-size: 5rem;" />
+            <MudText Typo="Typo.h5" Class="mt-4" Style="font-weight: bold;">
+                @StrLocalizer["Registration Successful"]
+            </MudText>
+
+            <div class="mt-4 w-100">
+                <StatusMessage Message="@statusMessage" />
+            </div>
+
+            @if (emailConfirmationLink is not null)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-4 w-100">
+                    @StrLocalizer["This app does not currently have a real email sender registered. Normally this would be emailed:"]
+                    <MudLink Href="@emailConfirmationLink" Underline="Underline.Always">@StrLocalizer["Click here to confirm your account"]</MudLink>
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body1" Align="Align.Center" Class="mt-2 text-muted">
+                    @StrLocalizer["Please check your email to confirm your account and proceed."]
+                </MudText>
+            }
+
+            <MudButton Href="/Account/Login" Variant="Variant.Outlined" Color="Color.Default" Class="mt-6" Style="font-weight: bold;">
+                @StrLocalizer["Back to Login"]
+            </MudButton>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Fields
+    private string? emailConfirmationLink;
+    private string? statusMessage;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        if (Email is null)
+        {
+            RedirectManager.RedirectTo("");
+            return;
+        }
+
+        ApplicationUser? user = await UserManager.FindByEmailAsync(Email);
+        if (user is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            statusMessage = StrLocalizer["Error finding user for unspecified email."];
+        }
+        else if (EmailSender is IdentityNoOpEmailSender)
+        {
+            string userId = await UserManager.GetUserIdAsync(user);
+            string code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+
+            emailConfirmationLink = NavigationManager.GetUriWithQueryParameters(
+                            NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                            new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+        }
+    }
+    #endregion Lifecycle
+
+}

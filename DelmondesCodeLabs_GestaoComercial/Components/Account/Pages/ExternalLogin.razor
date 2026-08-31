@@ -1,0 +1,245 @@
+﻿@page "/Account/ExternalLogin"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<ExternalLogin> Logger
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["External Login"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardHeader Class="d-flex flex-column align-center pb-0">
+            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Color="Color.Primary" Style="font-size: 4rem;" />
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="mt-2" Style="font-weight: bold;">
+                @StrLocalizer["External Registration"]
+            </MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="text-muted mt-1">
+                @string.Format(StrLocalizer["Associate your {0} account."].Value, ProviderDisplayName)
+            </MudText>
+        </MudCardHeader>
+
+        <MudCardContent Class="pt-4">
+            <StatusMessage Message="@message" />
+
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                @StrLocalizer["You have successfully authenticated with"] <strong>@ProviderDisplayName</strong>.
+                @StrLocalizer["Please enter an email address below to finish registration."]
+            </MudAlert>
+
+            <EditForm Model="Input" OnValidSubmit="OnValidSubmitAsync" FormName="confirmation" method="post">
+                <DataAnnotationsValidator />
+
+                <MudGrid>
+                    <MudItem xs="12">
+                        <div class="mud-native-input-control">
+                            <label class="mud-native-label">@StrLocalizer["Email Address"]</label>
+                            <InputText @bind-Value="Input.Email" type="email" autocomplete="email" class="mud-native-input" />
+                            <ValidationMessage For="() => Input.Email" class="mud-native-error" />
+                        </div>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <button type="submit" class="mud-native-btn">
+                            @StrLocalizer["Register Account"].ToString().ToUpper()
+                        </button>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Constants
+    public const string LoginCallbackAction = "LoginCallback";
+    #endregion Constants
+
+    #region Fields
+    private string? message;
+    private ExternalLoginInfo? externalLoginInfo;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? RemoteError { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Action { get; set; }
+
+    private string? ProviderDisplayName => externalLoginInfo?.ProviderDisplayName;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        if (RemoteError is not null)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Login", $"{StrLocalizer["Error from external provider:"]} {RemoteError}", HttpContext);
+            return;
+        }
+
+        ExternalLoginInfo? info = await SignInManager.GetExternalLoginInfoAsync();
+        if (info is null)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Login", StrLocalizer["Error loading external login information."], HttpContext);
+            return;
+        }
+
+        externalLoginInfo = info;
+
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            if (Action == LoginCallbackAction)
+            {
+                await OnLoginCallbackAsync();
+                return;
+            }
+
+            RedirectManager.RedirectTo("Account/Login");
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnLoginCallbackAsync()
+    {
+        if (externalLoginInfo is null)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Login", StrLocalizer["Error loading external login information."], HttpContext);
+            return;
+        }
+
+        SignInResult result = await SignInManager.ExternalLoginSignInAsync(
+            externalLoginInfo.LoginProvider,
+            externalLoginInfo.ProviderKey,
+            isPersistent: false,
+            bypassTwoFactor: true);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation(
+                "{Name} logged in with {LoginProvider} provider.",
+                externalLoginInfo.Principal.Identity?.Name,
+                externalLoginInfo.LoginProvider);
+            RedirectManager.RedirectTo(ReturnUrl);
+            return;
+        }
+        else if (result.IsLockedOut)
+        {
+            RedirectManager.RedirectTo("Account/Lockout");
+            return;
+        }
+
+        if (externalLoginInfo.Principal.HasClaim(c => c.Type == ClaimTypes.Email))
+        {
+            Input.Email = externalLoginInfo.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
+        }
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        if (externalLoginInfo is null)
+        {
+            RedirectManager.RedirectToWithStatus("Account/Login", StrLocalizer["Error loading external login information during confirmation."], HttpContext);
+            return;
+        }
+
+        IUserEmailStore<ApplicationUser> emailStore = GetEmailStore();
+        ApplicationUser user = CreateUser();
+
+        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+        await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
+
+        IdentityResult result = await UserManager.CreateAsync(user);
+        if (result.Succeeded)
+        {
+            result = await UserManager.AddLoginAsync(user, externalLoginInfo);
+            if (result.Succeeded)
+            {
+                Logger.LogInformation("User created an account using {Name} provider.", externalLoginInfo.LoginProvider);
+
+                string userId = await UserManager.GetUserIdAsync(user);
+                string code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+                code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+
+                string callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                    NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                    new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code });
+
+                await EmailSender.SendConfirmationLinkAsync(user, Input.Email, HtmlEncoder.Default.Encode(callbackUrl));
+
+                if (UserManager.Options.SignIn.RequireConfirmedAccount)
+                {
+                    RedirectManager.RedirectTo("Account/RegisterConfirmation", new() { ["email"] = Input.Email });
+                }
+                else
+                {
+                    await SignInManager.SignInAsync(user, isPersistent: false, externalLoginInfo.LoginProvider);
+                    RedirectManager.RedirectTo(ReturnUrl);
+                }
+            }
+        }
+        else
+        {
+            message = $"{StrLocalizer["Error"]}: {string.Join(",", result.Errors.Select(error => error.Description))}";
+        }
+    }
+
+    private ApplicationUser CreateUser()
+    {
+        try
+        {
+            return Activator.CreateInstance<ApplicationUser>();
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
+                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor");
+        }
+    }
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    {
+        if (!UserManager.SupportsUserEmail)
+        {
+            throw new NotSupportedException("The default UI requires a user store with email support.");
+        }
+        return (IUserEmailStore<ApplicationUser>)UserStore;
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "O endereço de e-mail é obrigatório.")]
+        [EmailAddress(ErrorMessage = "Formato de e-mail inválido.")]
+        public string Email { get; set; } = string.Empty;
+    }
+    #endregion Models
+
+}

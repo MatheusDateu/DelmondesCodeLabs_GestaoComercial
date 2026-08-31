@@ -1,0 +1,196 @@
+﻿@page "/Account/Manage/ExternalLogins"
+
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Manage External Logins"] - Delmondes CodeLabs</PageTitle>
+
+<MudCard Elevation="4" Class="pa-6 mb-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Style="font-weight: bold;">@StrLocalizer["Registered Logins"]</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    <MudCardContent>
+        <StatusMessage Message="@message" />
+
+        @if (currentLogins?.Count > 0)
+        {
+            <MudSimpleTable Style="overflow-x: auto;">
+                <tbody>
+                    @foreach (UserLoginInfo login in currentLogins)
+                    {
+                        <tr>
+                            <td class="align-middle">
+                                <MudText Typo="Typo.body1" Style="font-weight: bold;">@login.ProviderDisplayName</MudText>
+                            </td>
+                            <td class="text-end align-middle">
+                                @if (showRemoveButton)
+                                {
+                                    <form @formname="@($"remove-login-{login.LoginProvider}")" @onsubmit="OnSubmitAsync" method="post">
+                                        <input type="hidden" name="@nameof(LoginProvider)" value="@login.LoginProvider" />
+                                        <input type="hidden" name="@nameof(ProviderKey)" value="@login.ProviderKey" />
+                                        <button type="submit" style="padding: 6px 16px; border-radius: 4px; font-weight: bold; background-color: transparent; border: 1px solid var(--mud-palette-error); color: var(--mud-palette-error); cursor: pointer;">
+                                            @StrLocalizer["Remove"]
+                                        </button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="text-muted">@StrLocalizer["No external logins registered."]</MudText>
+        }
+    </MudCardContent>
+</MudCard>
+
+@if (otherLogins?.Count > 0)
+{
+    <MudCard Elevation="4" Class="pa-6" Style="border-radius: 8px;">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6" Style="font-weight: bold;">@StrLocalizer["Add another service to log in"]</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+
+        <MudCardContent>
+            <!-- Formulário mantido intocado, pois envia para um action externo de forma isolada -->
+            <form class="form-horizontal" action="Account/Manage/LinkExternalLogin" method="post" data-enhance="false">
+                <AntiforgeryToken />
+                <MudGrid>
+                    @foreach (AuthenticationScheme provider in otherLogins)
+                    {
+                        <MudItem>
+                            <button type="submit" name="Provider" value="@provider.Name" class="mud-native-btn">
+                                @provider.DisplayName
+                            </button>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </form>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    #region Constants
+    public const string LinkLoginCallbackAction = "LinkLoginCallback";
+    #endregion Constants
+
+    #region Fields
+    private string? message;
+    private ApplicationUser? user;
+    private IList<UserLoginInfo>? currentLogins;
+    private IList<AuthenticationScheme>? otherLogins;
+    private bool showRemoveButton;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private string? LoginProvider { get; set; }
+
+    [SupplyParameterFromForm]
+    private string? ProviderKey { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Action { get; set; }
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        currentLogins = await UserManager.GetLoginsAsync(user);
+        otherLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync())
+            .Where(auth => currentLogins.All(ul => auth.Name != ul.LoginProvider))
+            .ToList();
+
+        string? passwordHash = null;
+        if (UserStore is IUserPasswordStore<ApplicationUser> userPasswordStore)
+        {
+            passwordHash = await userPasswordStore.GetPasswordHashAsync(user, HttpContext.RequestAborted);
+        }
+
+        showRemoveButton = passwordHash is not null || currentLogins.Count > 1;
+
+        if (HttpMethods.IsGet(HttpContext.Request.Method) && Action == LinkLoginCallbackAction)
+        {
+            await OnGetLinkLoginCallbackAsync();
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        IdentityResult result = await UserManager.RemoveLoginAsync(user, LoginProvider!, ProviderKey!);
+        if (!result.Succeeded)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["The external login was not removed."]}", HttpContext);
+        }
+        else
+        {
+            await SignInManager.RefreshSignInAsync(user);
+            RedirectManager.RedirectToCurrentPageWithStatus(StrLocalizer["The external login was removed."], HttpContext);
+        }
+    }
+
+    private async Task OnGetLinkLoginCallbackAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        string userId = await UserManager.GetUserIdAsync(user);
+        ExternalLoginInfo? info = await SignInManager.GetExternalLoginInfoAsync(userId);
+
+        if (info is null)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["Could not load external login info."]}", HttpContext);
+            return;
+        }
+
+        IdentityResult result = await UserManager.AddLoginAsync(user, info);
+        if (result.Succeeded)
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            RedirectManager.RedirectToCurrentPageWithStatus(StrLocalizer["The external login was added."], HttpContext);
+        }
+        else
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["The external login was not added. External logins can only be associated with one account."]}", HttpContext);
+        }
+    }
+    #endregion Methods
+
+}

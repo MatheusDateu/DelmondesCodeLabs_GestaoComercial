@@ -1,0 +1,49 @@
+﻿@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+@if (externalLogins.Length == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        @StrLocalizer["There are no external authentication services configured. See this"] <MudLink Href="https://go.microsoft.com/fwlink/?LinkID=532715" Underline="Underline.Always">@StrLocalizer["article about setting up external services"]</MudLink>.
+    </MudAlert>
+}
+else
+{
+    <form action="Account/PerformExternalLogin" method="post" data-enhance="false">
+        <AntiforgeryToken />
+        <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+
+        <div class="d-flex flex-column gap-3">
+            @foreach (var provider in externalLogins)
+            {
+                <button type="submit" name="provider" value="@provider.Name" class="mud-native-btn" style="background-color: transparent; border: 1px solid var(--mud-palette-primary); color: var(--mud-palette-primary);">
+                    @StrLocalizer["Log in with"] @provider.DisplayName
+                </button>
+            }
+        </div>
+    </form>
+}
+
+@code {
+    #region Fields
+    private AuthenticationScheme[] externalLogins = [];
+    #endregion Fields
+
+    #region Properties
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        externalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).ToArray();
+    }
+    #endregion Lifecycle
+}

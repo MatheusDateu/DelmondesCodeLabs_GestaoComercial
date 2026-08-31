@@ -1,0 +1,127 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Localization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Authorization
+
+@attribute [AllowAnonymous]
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Delmondes CodeLabs - @StrLocalizer["Commercial Management"]</PageTitle>
+
+<!-- Hero Section -->
+<MudPaper Elevation="0" Class="pa-8 text-center" Style="background-color: var(--mud-palette-appbar-background); color: var(--mud-palette-appbar-text); border-radius: 0 0 24px 24px;">
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-12">
+        <!-- Fonte responsiva com clamp e quebra de linha forçada apenas no mobile (d-sm-none) -->
+        <MudText Typo="Typo.h2" Style="font-weight: 900; letter-spacing: 2px; font-size: clamp(2rem, 10vw, 3.75rem); line-height: 1.2;" Class="mb-4">
+            <span style="color: var(--mud-palette-primary);">DELMONDES</span><br class="d-block d-sm-none" /> CODELABS
+        </MudText>
+        <MudText Typo="Typo.h5" Class="mb-8" Style="opacity: 0.9; font-size: clamp(1.1rem, 4vw, 1.5rem);">
+            @StrLocalizer["The ultimate high-performance POS and Management system for your business."]
+        </MudText>
+
+        <!-- Botões empilhados no mobile e em linha no desktop -->
+        <div class="d-flex flex-column flex-sm-row justify-center gap-4">
+            <MudButton Href="/Account/Login" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Style="color: #000000; font-weight: bold; padding: 12px 32px;">
+                @StrLocalizer["Access System"].ToString().ToUpper()
+            </MudButton>
+            <MudButton Href="#contact" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Large" Style="font-weight: bold; padding: 12px 32px;">
+                @StrLocalizer["Contact Sales"].ToString().ToUpper()
+            </MudButton>
+        </div>
+    </MudContainer>
+</MudPaper>
+
+<!-- Features Section -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-16">
+    <MudText Typo="Typo.h4" Align="Align.Center" Style="font-weight: bold;" Class="mb-12">
+        @StrLocalizer["Why choose our platform?"]
+    </MudText>
+
+    <MudGrid Spacing="6" Justify="Justify.Center">
+        <MudItem xs="12" sm="4">
+            <MudCard Elevation="2" Class="pa-4 h-100" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+                <MudCardContent Class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.PointOfSale" Color="Color.Primary" Style="font-size: 4rem;" Class="mb-4" />
+                    <MudText Typo="Typo.h6" Style="font-weight: bold;" Class="mb-2">@StrLocalizer["Agile POS"]</MudText>
+                    <MudText Typo="Typo.body2" Class="text-muted">
+                        @StrLocalizer["Lightning-fast checkouts, seamless open tabs, and real-time validations to keep your queue moving."]
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <MudCard Elevation="2" Class="pa-4 h-100" Style="border-top: 4px solid var(--mud-palette-secondary); border-radius: 8px;">
+                <MudCardContent Class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Inventory" Color="Color.Secondary" Style="font-size: 4rem;" Class="mb-4" />
+                    <MudText Typo="Typo.h6" Style="font-weight: bold;" Class="mb-2">@StrLocalizer["Smart Inventory"]</MudText>
+                    <MudText Typo="Typo.body2" Class="text-muted">
+                        @StrLocalizer["BOM deductions, raw material tracking, and automated minimum stock alerts."]
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <MudCard Elevation="2" Class="pa-4 h-100" Style="border-top: 4px solid var(--mud-palette-info); border-radius: 8px;">
+                <MudCardContent Class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Insights" Color="Color.Info" Style="font-size: 4rem;" Class="mb-4" />
+                    <MudText Typo="Typo.h6" Style="font-weight: bold;" Class="mb-2">@StrLocalizer["BI Dashboards"]</MudText>
+                    <MudText Typo="Typo.body2" Class="text-muted">
+                        @StrLocalizer["Data-driven decisions with real-time true net profit calculations and granular financial reports."]
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+<!-- Contact & Support Section -->
+<MudPaper id="contact" Elevation="0" Class="pa-12 text-center mt-8" Style="background-color: var(--mud-palette-background-grey);">
+    <MudContainer MaxWidth="MaxWidth.Medium">
+        <MudText Typo="Typo.h4" Style="font-weight: bold;" Class="mb-4">
+            @StrLocalizer["Ready to upgrade your business?"]
+        </MudText>
+        <MudText Typo="Typo.body1" Class="mb-8 text-muted">
+            @StrLocalizer["Reach out to our commercial team for a custom quote, or contact support if you need assistance."]
+        </MudText>
+
+        <!-- Botões empilhados no mobile e em linha no desktop -->
+        <div class="d-flex flex-column flex-sm-row justify-center gap-4">
+            <MudButton Href="mailto:contato@delmondescodelabs.dpdns.org" Target="_blank" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" StartIcon="@Icons.Material.Filled.Email" Style="color: #000000; font-weight: bold;">
+                @StrLocalizer["Sales & Partnership"]
+            </MudButton>
+
+            <MudButton Href="mailto:suporte@delmondescodelabs.dpdns.org" Target="_blank" Variant="Variant.Outlined" Color="Color.Default" Size="Size.Large" StartIcon="@Icons.Material.Filled.SupportAgent" Style="font-weight: bold;">
+                @StrLocalizer["Technical Support"]
+            </MudButton>
+        </div>
+
+        <MudText Typo="Typo.caption" Class="d-block mt-8 text-muted">
+            <MudLink Href="/Legal/License" Color="Color.Primary" Underline="Underline.Hover">@StrLocalizer["Software License Agreement"]</MudLink>
+        </MudText>
+    </MudContainer>
+</MudPaper>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            if (user.IsInRole("SuperUser") || user.IsInRole("Admin"))
+            {
+                Navigation.NavigateTo("/bi", true);
+            }
+            else if (user.IsInRole("Cashier") || user.IsInRole("Waiter"))
+            {
+                Navigation.NavigateTo("/pos/terminal", true);
+            }
+        }
+    }
+}

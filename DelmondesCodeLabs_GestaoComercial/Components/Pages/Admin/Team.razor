@@ -1,0 +1,187 @@
+﻿@page "/Admin/Team"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Localization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.DependencyInjection
+
+@attribute [Authorize(Roles = "SuperUser")]
+
+@inject IServiceProvider ServiceProvider
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Team Management"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-6 px-2 flex-wrap">
+        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;">
+            @StrLocalizer["Team Management"]
+        </MudText>
+        <MudSpacer />
+        <MudButton Href="/Account/Register" Variant="Variant.Filled" Color="Color.Primary" Style="color: #000000; font-weight: bold;" StartIcon="@Icons.Material.Filled.PersonAdd">
+            @StrLocalizer["Register New User"].ToString().ToUpper()
+        </MudButton>
+    </MudStack>
+
+    <MudTable Items="@_teamMembers" Dense="true" Hover="true" Elevation="4" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <HeaderContent>
+            <MudTh>@StrLocalizer["Status"]</MudTh>
+            <MudTh>@StrLocalizer["Name"]</MudTh>
+            <MudTh>@StrLocalizer["Email Address"]</MudTh>
+            <MudTh>@StrLocalizer["Role"]</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="member">
+            <MudTd DataLabel="@StrLocalizer["Status"]">
+                <MudChip T="string" Size="Size.Small" Color="@(member.IsOnline ? Color.Success : Color.Default)" Variant="@(member.IsOnline ? Variant.Filled : Variant.Outlined)">
+                    @(member.IsOnline ? StrLocalizer["Online"] : StrLocalizer["Offline"])
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="@StrLocalizer["Name"]" Style="font-weight: bold;">@member.UserName</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Email Address"]">@member.Email</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Role"]">
+                <MudSelect T="string" Value="@member.Role" ValueChanged="@(async (string? newRole) => await ChangeRoleAsync(member, newRole))" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 150px;">
+                    <MudSelectItem Value="@("Visitor")" Disabled="true">@StrLocalizer["Visitor"]</MudSelectItem>
+                    <MudSelectItem Value="@("SuperUser")">@StrLocalizer["SuperUser"]</MudSelectItem>
+                    <MudSelectItem Value="@("Admin")">@StrLocalizer["Admin"]</MudSelectItem>
+                    <MudSelectItem Value="@("Cashier")">@StrLocalizer["Cashier"]</MudSelectItem>
+                    <MudSelectItem Value="@("Waiter")">@StrLocalizer["Waiter"]</MudSelectItem>
+                </MudSelect>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>@StrLocalizer["No team members found."]</MudText>
+        </NoRecordsContent>
+        <LoadingContent>
+            <MudText>@StrLocalizer["Loading team..."]</MudText>
+        </LoadingContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    #region Fields
+    private List<TeamMemberDto> _teamMembers = new();
+    private string _currentUserId = string.Empty;
+    #endregion Fields
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the component, dynamically spawns a short-lived scope to fetch users safely.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        AuthenticationState authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+
+        using IServiceScope scope = ServiceProvider.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        List<ApplicationUser> users = await userManager.Users.ToListAsync();
+
+        foreach (ApplicationUser user in users)
+        {
+            IList<string> roles = await userManager.GetRolesAsync(user);
+            _teamMembers.Add(new TeamMemberDto
+            {
+                UserId = user.Id,
+                UserName = user.UserName ?? string.Empty,
+                Email = user.Email ?? string.Empty,
+                Role = roles.FirstOrDefault() ?? "Visitor",
+                IsOnline = user.Id == _currentUserId
+            });
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    /// <summary>
+    /// Safely updates the access role with extensive null checks to prevent unhandled UI exceptions.
+    /// </summary>
+    private async Task ChangeRoleAsync(TeamMemberDto member, string? newRole)
+    {
+        // 1. Strict null-checking to bypass transient MudSelect states
+        if (member == null || string.IsNullOrWhiteSpace(newRole))
+        {
+            return;
+        }
+
+        try
+        {
+            if (member.UserId == _currentUserId)
+            {
+                Snackbar.Add(StrLocalizer["You cannot change your own role."], Severity.Error);
+                return;
+            }
+
+            if (member.Role == newRole) return;
+
+            using IServiceScope scope = ServiceProvider.CreateScope();
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+            ApplicationUser? user = await userManager.FindByIdAsync(member.UserId);
+            if (user == null)
+            {
+                Snackbar.Add(StrLocalizer["Error finding user."], Severity.Error);
+                return;
+            }
+
+            IList<string> currentRoles = await userManager.GetRolesAsync(user);
+
+            // 2. Safely remove existing roles only if the collection is genuinely populated
+            if (currentRoles != null && currentRoles.Any())
+            {
+                IdentityResult removeResult = await userManager.RemoveFromRolesAsync(user, currentRoles);
+                if (!removeResult.Succeeded)
+                {
+                    Snackbar.Add(StrLocalizer["Failed to update role."], Severity.Error);
+                    return;
+                }
+            }
+
+            // 3. Apply the newly requested role
+            IdentityResult addResult = await userManager.AddToRoleAsync(user, newRole);
+
+            if (addResult.Succeeded)
+            {
+                member.Role = newRole;
+                Snackbar.Add(StrLocalizer["Role updated successfully."], Severity.Success);
+            }
+            else
+            {
+                // 4. Expose the raw Identity validation errors if the database rejects the command
+                string detailedErrors = string.Join(", ", addResult.Errors.Select(e => e.Description));
+                Snackbar.Add($"{StrLocalizer["Failed to update role."]} {detailedErrors}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Fallback safety net to prevent the Blazor Circuit from collapsing
+            Snackbar.Add($"{StrLocalizer["Error"]}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            // Forces the UI to reflect the data structure changes consistently
+            StateHasChanged();
+        }
+    }
+    #endregion Methods
+
+    #region Models
+    /// <summary>
+    /// Lightweight Data Transfer Object, completely disconnected from EF Core tracking.
+    /// </summary>
+    private sealed class TeamMemberDto
+    {
+        public string UserId { get; set; } = string.Empty;
+        public string UserName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public bool IsOnline { get; set; }
+    }
+    #endregion Models
+
+}

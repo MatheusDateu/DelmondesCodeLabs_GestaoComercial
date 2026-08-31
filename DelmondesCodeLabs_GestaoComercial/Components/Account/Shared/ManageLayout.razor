@@ -1,0 +1,23 @@
+﻿@inherits LayoutComponentBase
+@layout DelmondesCodeLabs_GestaoComercial.Components.Layout.MainLayout
+@using Microsoft.Extensions.Localization
+
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <MudText Typo="Typo.h4" Color="Color.Primary" Class="mb-4" Style="font-weight: bold;">
+        @StrLocalizer["Account Management"]
+    </MudText>
+    <MudText Typo="Typo.subtitle1" Class="mb-6 text-muted">
+        @StrLocalizer["Change your account settings and manage preferences."]
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <ManageNavMenu />
+        </MudItem>
+        <MudItem xs="12" md="9">
+            @Body
+        </MudItem>
+    </MudGrid>
+</MudContainer>

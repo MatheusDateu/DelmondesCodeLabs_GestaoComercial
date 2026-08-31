@@ -1,0 +1,277 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Localization
+
+@inject IStockEntryRepository StockEntryRepository
+@inject IStockMovementRepository StockMovementRepository
+@inject IProductRepository ProductRepository
+@inject ISupplierQueries SupplierQueries
+@inject IProductQueries ProductQueries
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Model" OnValidSubmit="OnValidSubmitAsync" id="stockEntryForm" FormName="StockEntryForm">
+            <DataAnnotationsValidator />
+
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="Model.SupplierId"
+                               For="@(() => Model.SupplierId)"
+                               Label="@StrLocalizer["Supplier"]"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               Direction="Direction.Bottom"
+                               OffsetY="true"
+                               MaxHeight="200">
+                        <MudSelectItem Value="@Guid.Empty">@StrLocalizer["Select a supplier"]</MudSelectItem>
+                        @if (_suppliers is not null)
+                        {
+                            @foreach (Supplier supplier in _suppliers)
+                            {
+                                <MudSelectItem Value="@supplier.Id">@supplier.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Model.InvoiceNumber"
+                                  For="@(() => Model.InvoiceNumber)"
+                                  Label="@StrLocalizer["Invoice Number"]"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Class="mb-4" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_entryDate"
+                                   Label="@StrLocalizer["Entry Date"]"
+                                   Variant="Variant.Outlined"
+                                   Required="true" />
+                </MudItem>
+            </MudGrid>
+
+            <MudDivider Class="mb-4" />
+            <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-2" Style="font-weight: bold;">
+                @StrLocalizer["Add Items"]
+            </MudText>
+
+            <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-4 flex-wrap">
+                <MudSelect T="Guid" @bind-Value="_selectedProductId" Label="@StrLocalizer["Product"]" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" MaxHeight="200" Direction="Direction.Bottom" OffsetY="true">
+                    <MudSelectItem T="Guid" Value="@Guid.Empty">@StrLocalizer["Select a product"]</MudSelectItem>
+                    @if (_availableProducts is not null)
+                    {
+                        @foreach (Product product in _availableProducts)
+                        {
+                            <MudSelectItem T="Guid" Value="@product.Id">@product.Name (@product.Sku)</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+                <MudNumericField @bind-Value="_itemQuantity" Label="@StrLocalizer["Quantity"]" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0.001m" Format="N3" Style="width: 100px;" />
+                <MudNumericField @bind-Value="_itemUnitCost" Label="@StrLocalizer["Unit Cost"]" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0m" Format="N2" Style="width: 120px;" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddItemToEntry" Style="color: #000000; font-weight: bold; height: 40px;">
+                    @StrLocalizer["Add"].ToString().ToUpper()
+                </MudButton>
+            </MudStack>
+
+            <MudTable Items="Model.Items" Dense="true" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
+                <HeaderContent>
+                    <MudTh>@StrLocalizer["Product"]</MudTh>
+                    <MudTh>@StrLocalizer["Quantity"]</MudTh>
+                    <MudTh>@StrLocalizer["Unit Cost"]</MudTh>
+                    <MudTh>@StrLocalizer["Total"]</MudTh>
+                    <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd DataLabel="@StrLocalizer["Product"]">@item.Product?.Name</MudTd>
+                    <MudTd DataLabel="@StrLocalizer["Quantity"]">@item.Quantity.ToString("N3")</MudTd>
+                    <MudTd DataLabel="@StrLocalizer["Unit Cost"]">@item.UnitCost.ToString("C")</MudTd>
+                    <MudTd DataLabel="@StrLocalizer["Total"]">@((item.Quantity * item.UnitCost).ToString("C"))</MudTd>
+                    <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveItemFromEntry(item))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Class="pa-4 text-center">@StrLocalizer["No items added to this entry."]</MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4 pa-2" Style="background-color: var(--mud-palette-background-grey); border-radius: 4px;">
+                <MudText Typo="Typo.h6" Style="font-weight: bold;">
+                    @StrLocalizer["Total Invoice Cost"]: @CalculatedTotalCost.ToString("C")
+                </MudText>
+            </MudStack>
+
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@StrLocalizer["Cancel"].ToString().ToUpper()</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" ButtonType="ButtonType.Submit" form="stockEntryForm" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Save"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Fields
+    private IEnumerable<Supplier>? _suppliers;
+    private IEnumerable<Product>? _availableProducts;
+    private DateTime? _entryDate = DateTime.Today;
+    private Guid _selectedProductId = Guid.Empty;
+    private decimal _itemQuantity = 1m;
+    private decimal _itemUnitCost = 0m;
+    #endregion Fields
+
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public StockEntry Model { get; set; } = new();
+
+    [Parameter]
+    public bool IsEditing { get; set; }
+    #endregion Parameters
+
+    #region Computed Properties
+    /// <summary>
+    /// Calculates the sum of all item totals dynamically.
+    /// </summary>
+    private decimal CalculatedTotalCost => Model.Items.Sum(i => i.Quantity * i.UnitCost);
+    #endregion Computed Properties
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises dropdown data for suppliers and products. Filters out Service products.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        PagedResult<Supplier> supplierResult = await SupplierQueries.GetPaginatedAsync(null, 1, 1000);
+        _suppliers = supplierResult.Items;
+
+        PagedResult<Product> productResult = await ProductQueries.SearchProductsAsync(null, 1, 5000);
+        _availableProducts = productResult.Items.Where(p => p.Type != ProductType.Service);
+
+        if (IsEditing)
+        {
+            _entryDate = Model.EntryDate.DateTime;
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    /// <summary>
+    /// Validates and adds a temporary item to the in-memory entry list.
+    /// </summary>
+    private void AddItemToEntry()
+    {
+        if (_selectedProductId == Guid.Empty)
+        {
+            Snackbar.Add(StrLocalizer["Please select a product."], Severity.Warning);
+            return;
+        }
+
+        if (_itemQuantity <= 0)
+        {
+            Snackbar.Add(StrLocalizer["Quantity must be greater than zero."], Severity.Warning);
+            return;
+        }
+
+        Product? selectedProduct = _availableProducts?.FirstOrDefault(p => p.Id == _selectedProductId);
+
+        if (selectedProduct is not null)
+        {
+            Model.Items.Add(new StockEntryItem
+            {
+                ProductId = selectedProduct.Id,
+                Product = selectedProduct,
+                Quantity = _itemQuantity,
+                UnitCost = _itemUnitCost
+            });
+
+            _selectedProductId = Guid.Empty;
+            _itemQuantity = 1m;
+            _itemUnitCost = 0m;
+        }
+    }
+
+    /// <summary>
+    /// Removes an item from the in-memory entry list.
+    /// </summary>
+    private void RemoveItemFromEntry(StockEntryItem item)
+    {
+        Model.Items.Remove(item);
+    }
+
+    /// <summary>
+    /// Validates the entire form, persists the stock entry, logs movements, and updates actual stock.
+    /// </summary>
+    private async Task OnValidSubmitAsync()
+    {
+        if (Model.SupplierId == Guid.Empty)
+        {
+            Snackbar.Add(StrLocalizer["Please select a valid supplier."], Severity.Warning);
+            return;
+        }
+
+        if (!Model.Items.Any())
+        {
+            Snackbar.Add(StrLocalizer["You must add at least one item to the invoice."], Severity.Warning);
+            return;
+        }
+
+        Model.EntryDate = _entryDate.HasValue
+            ? new DateTimeOffset(_entryDate.Value.ToUniversalTime())
+            : DateTimeOffset.UtcNow;
+
+        Model.TotalCost = CalculatedTotalCost;
+
+        if (IsEditing)
+        {
+            await StockEntryRepository.UpdateAsync(Model);
+            Snackbar.Add(StrLocalizer["Stock entry updated successfully."], Severity.Success);
+        }
+        else
+        {
+            await StockEntryRepository.AddAsync(Model);
+
+            foreach (StockEntryItem item in Model.Items)
+            {
+                StockMovement movement = new StockMovement
+                {
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    Type = MovementType.Entry,
+                    MovementDate = Model.EntryDate,
+                    Reason = $"Invoice: {Model.InvoiceNumber}"
+                };
+
+                await StockMovementRepository.AddAsync(movement);
+
+                Product? productToUpdate = await ProductQueries.GetByIdAsync(item.ProductId);
+                if (productToUpdate != null)
+                {
+                    productToUpdate.CurrentStock += item.Quantity;
+                    await ProductRepository.UpdateAsync(productToUpdate);
+                }
+            }
+
+            Snackbar.Add(StrLocalizer["Stock entry registered successfully."], Severity.Success);
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Cancels the operation and closes the dialogue.
+    /// </summary>
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    #endregion Methods
+
+}

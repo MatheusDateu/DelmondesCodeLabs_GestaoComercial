@@ -1,0 +1,113 @@
+﻿@page "/Account/ResendEmailConfirmation"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Resend email confirmation"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardHeader Class="d-flex flex-column align-center pb-0">
+            <MudIcon Icon="@Icons.Material.Filled.MarkEmailUnread" Color="Color.Primary" Style="font-size: 4rem;" />
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="mt-2" Style="font-weight: bold;">
+                @StrLocalizer["Resend email confirmation"]
+            </MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="text-muted mt-1">
+                @StrLocalizer["Enter your email."]
+            </MudText>
+        </MudCardHeader>
+
+        <MudCardContent Class="pt-6">
+            <StatusMessage Message="@message" />
+
+            <EditForm Model="Input" FormName="resend-email-confirmation" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <DataAnnotationsValidator />
+
+                <MudGrid>
+                    <MudItem xs="12">
+                        <div class="mud-native-input-control">
+                            <label class="mud-native-label">@StrLocalizer["Email Address"]</label>
+                            <InputText @bind-Value="Input.Email" type="email" class="mud-native-input" />
+                            <ValidationMessage For="() => Input.Email" class="mud-native-error" />
+                        </div>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <button type="submit" class="mud-native-btn">
+                            @StrLocalizer["Resend"].ToString().ToUpper()
+                        </button>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudCardContent>
+
+        <MudCardActions Class="d-flex justify-center pb-4 mt-2">
+            <MudLink Href="/Account/Login" Typo="Typo.body2" Color="Color.Default" Underline="Underline.Hover">
+                @StrLocalizer["Back to Login"]
+            </MudLink>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Fields
+    private string? message;
+    #endregion Fields
+
+    #region Properties
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override void OnInitialized()
+    {
+        Input ??= new();
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnValidSubmitAsync()
+    {
+        ApplicationUser? user = await UserManager.FindByEmailAsync(Input.Email!);
+        if (user is null)
+        {
+            message = StrLocalizer["Verification email sent. Please check your email."];
+            return;
+        }
+
+        string userId = await UserManager.GetUserIdAsync(user);
+        string code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+        code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+
+        string callbackUrl = NavigationManager.GetUriWithQueryParameters(
+                    NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+                    new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code });
+
+        await EmailSender.SendConfirmationLinkAsync(user, Input.Email, HtmlEncoder.Default.Encode(callbackUrl));
+
+        message = StrLocalizer["Verification email sent. Please check your email."];
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "O endereço de e-mail é obrigatório.")]
+        [EmailAddress(ErrorMessage = "Formato de e-mail inválido.")]
+        public string Email { get; set; } = "";
+    }
+    #endregion Models
+
+}

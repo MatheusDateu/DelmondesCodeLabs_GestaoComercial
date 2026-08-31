@@ -1,0 +1,47 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudNavMenu Color="Color.Primary" Class="pa-2" Style="border-radius: 8px; background-color: var(--mud-palette-surface);">
+    <MudNavLink Href="Account/Manage" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Person">@StrLocalizer["Profile"]</MudNavLink>
+    <MudNavLink Href="Account/Manage/Email" Icon="@Icons.Material.Filled.Email">@StrLocalizer["Email"]</MudNavLink>
+    <MudNavLink Href="Account/Manage/ChangePassword" Icon="@Icons.Material.Filled.Password">@StrLocalizer["Password"]</MudNavLink>
+
+    @if (hasExternalLogins)
+    {
+        <MudNavLink Href="Account/Manage/ExternalLogins" Icon="@Icons.Material.Filled.AccountTree">@StrLocalizer["External Logins"]</MudNavLink>
+    }
+
+    <MudNavLink Href="Account/Manage/TwoFactorAuthentication" Icon="@Icons.Material.Filled.Security">@StrLocalizer["Two-Factor Auth"]</MudNavLink>
+    <MudNavLink Href="Account/Manage/Passkeys" Icon="@Icons.Material.Filled.Key">@StrLocalizer["Passkeys"]</MudNavLink>
+    <MudNavLink Href="Account/Manage/PersonalData" Icon="@Icons.Material.Filled.DeleteForever">@StrLocalizer["Personal Data"]</MudNavLink>
+    <MudDivider Class="my-2" />
+
+    <!-- Formulário nativo obrigatório com data-enhance para não quebrar o Antiforgery no Logout -->
+    <form action="Account/Logout" method="post" data-enhance="false">
+        <AntiforgeryToken />
+        <input type="hidden" name="ReturnUrl" value="" />
+        <button type="submit" style="width: 100%; text-align: left; background: none; border: none; cursor: pointer; padding: 0;">
+            <MudNavLink Icon="@Icons.Material.Filled.Logout" Style="color: var(--mud-palette-error); font-weight: bold;">
+                @StrLocalizer["Log out"]
+            </MudNavLink>
+        </button>
+    </form>
+</MudNavMenu>
+
+@code {
+    #region Fields
+    private bool hasExternalLogins;
+    #endregion Fields
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        hasExternalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).Any();
+    }
+    #endregion Lifecycle
+
+}

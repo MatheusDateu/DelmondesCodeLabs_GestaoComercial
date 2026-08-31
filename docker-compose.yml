@@ -1,0 +1,58 @@
+services:
+  delmondescodelabs_gestaocomercial:
+    image: ${DOCKER_REGISTRY-}delmondescodelabsgestaocomercial
+    build:
+      context: .
+      dockerfile: DelmondesCodeLabs_GestaoComercial/Dockerfile
+    depends_on:
+      gestaocomercial-db:
+        condition: service_healthy
+    volumes:
+      - dcl-keys:/app/keys
+
+  gestaocomercial-db:
+    image: postgres:latest
+    container_name: dcl-postgres-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: GestaoComercialDb
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - dcl-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d GestaoComercialDb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: dcl-cloudflared-tunnel
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TOKEN}
+    command: tunnel run
+    depends_on:
+      - delmondescodelabs_gestaocomercial
+    restart: unless-stopped
+
+  # NGROK FALLBACK
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: dcl-ngrok-tunnel
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_TOKEN}
+    command: "http delmondescodelabs_gestaocomercial:8080"
+    ports:
+      - "4040:4040" # Porta para ver a URL gerada pelo Ngrok
+    depends_on:
+      - delmondescodelabs_gestaocomercial
+    restart: unless-stopped
+
+volumes:
+  dcl-db-data: {}
+  dcl-keys: {}

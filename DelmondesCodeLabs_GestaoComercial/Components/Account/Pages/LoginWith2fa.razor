@@ -1,0 +1,135 @@
+﻿@page "/Account/LoginWith2fa"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<LoginWith2fa> Logger
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Two-Factor Authentication"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardHeader Class="d-flex flex-column align-center pb-0">
+            <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" Style="font-size: 4rem;" />
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="mt-2" Style="font-weight: bold;">
+                @StrLocalizer["Two-Factor Verification"]
+            </MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="text-muted mt-1">
+                @StrLocalizer["Enter your authenticator code below to continue."]
+            </MudText>
+        </MudCardHeader>
+
+        <MudCardContent Class="pt-6">
+            <StatusMessage Message="@message" />
+
+            <EditForm Model="Input" FormName="login-with-2fa" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <DataAnnotationsValidator />
+
+                <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+                <input type="hidden" name="RememberMe" value="@RememberMe" />
+
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="Input.TwoFactorCode"
+                                      For="@(() => Input.TwoFactorCode)"
+                                      Label="@StrLocalizer["Authenticator Code"]"
+                                      Placeholder="000000"
+                                      Variant="Variant.Outlined"
+                                      InputType="InputType.Text"
+                                      Required="true" />
+                    </MudItem>
+
+                    <MudItem xs="12" Class="d-flex align-center pb-4">
+                        <MudCheckBox @bind-Value="Input.RememberMachine"
+                                     Label="@StrLocalizer["Remember this machine"]"
+                                     Color="Color.Primary" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large" Style="color: #000000; font-weight: bold;">
+                            @StrLocalizer["Verify & Log In"].ToString().ToUpper()
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudCardContent>
+
+        <MudCardActions Class="d-flex justify-center pb-4 mt-2">
+            <MudLink Href="@($"/Account/LoginWithRecoveryCode?ReturnUrl={ReturnUrl}")" Typo="Typo.body2" Color="Color.Default" Underline="Underline.Hover">
+                @StrLocalizer["Log in with a recovery code"]
+            </MudLink>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Fields
+    private string? message;
+    private ApplicationUser user = default!;
+    #endregion Fields
+
+    #region Properties
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    private bool RememberMe { get; set; }
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await SignInManager.GetTwoFactorAuthenticationUserAsync() ??
+            throw new InvalidOperationException("Unable to load two-factor authentication user.");
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnValidSubmitAsync()
+    {
+        string authenticatorCode = Input.TwoFactorCode!.Replace(" ", string.Empty).Replace("-", string.Empty);
+        SignInResult result = await SignInManager.TwoFactorAuthenticatorSignInAsync(authenticatorCode, RememberMe, Input.RememberMachine);
+        string userId = await UserManager.GetUserIdAsync(user);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User with ID '{UserId}' logged in with 2fa.", userId);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User with ID '{UserId}' account locked out.", userId);
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            Logger.LogWarning("Invalid authenticator code entered for user with ID '{UserId}'.", userId);
+            message = $"{StrLocalizer["Error"]}: {StrLocalizer["Invalid authenticator code."]}";
+        }
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "O código do autenticador é obrigatório.")]
+        [StringLength(7, ErrorMessage = "O código deve ter pelo menos {2} e no máximo {1} caracteres.", MinimumLength = 6)]
+        [DataType(DataType.Text)]
+        public string? TwoFactorCode { get; set; }
+
+        public bool RememberMachine { get; set; }
+    }
+    #endregion Models
+
+}

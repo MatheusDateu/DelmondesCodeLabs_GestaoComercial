@@ -1,0 +1,23 @@
+﻿@page "/Account/AccessDenied"
+
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Access Denied"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-error); border-radius: 8px;">
+        <MudCardContent Class="d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.GppBad" Color="Color.Error" Style="font-size: 5rem;" />
+            <MudText Typo="Typo.h5" Class="mt-4" Color="Color.Error" Style="font-weight: bold;">
+                @StrLocalizer["Access Denied"]
+            </MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Class="mt-2 text-muted">
+                @StrLocalizer["You do not have the required permissions to access this resource, mate."]
+            </MudText>
+            <MudButton Href="/" Variant="Variant.Text" Color="Color.Primary" Class="mt-6" Style="font-weight: bold;">
+                @StrLocalizer["Return to Home Page"]
+            </MudButton>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>

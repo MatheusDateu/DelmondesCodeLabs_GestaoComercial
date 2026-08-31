@@ -1,0 +1,221 @@
+﻿@page "/marketing/promotions"
+@attribute [Authorize(Roles = "SuperUser, Admin")]
+
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+
+@inject IPromotionQueries PromotionQueries
+@inject IPromotionRepository PromotionRepository
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Promotions"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-6 px-2 flex-wrap">
+        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;">
+            @StrLocalizer["Promotions"]
+        </MudText>
+
+        <MudSpacer />
+
+        @if (_selectedItems?.Any() == true)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="DeleteSelectedPromotionsAsync" StartIcon="@Icons.Material.Filled.DeleteSweep" Style="font-weight: bold;">
+                @StrLocalizer["Delete"].ToString().ToUpper() (@_selectedItems.Count)
+            </MudButton>
+        }
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialogAsync" Style="color: #000000; font-weight: bold;" StartIcon="@Icons.Material.Filled.Add">
+            @StrLocalizer["New Promotion"].ToString().ToUpper()
+        </MudButton>
+    </MudStack>
+
+    <MudTable ServerData="LoadServerDataAsync" MultiSelection="true" @bind-SelectedItems="_selectedItems" Dense="true" Hover="true" @ref="_table" Elevation="4" Style="border-top: 4px solid #03fa6e; border-radius: 8px;" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="true">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField T="string" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@StrLocalizer["Search promotions..."]" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+        </ToolBarContent>
+
+        <HeaderContent>
+            <MudTh>@StrLocalizer["Name"]</MudTh>
+            <MudTh>@StrLocalizer["Discount"]</MudTh>
+            <MudTh>@StrLocalizer["Start Date"]</MudTh>
+            <MudTh>@StrLocalizer["End Date"]</MudTh>
+            <MudTh>@StrLocalizer["Status"]</MudTh>
+            <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="promo">
+            <MudTd DataLabel="@StrLocalizer["Name"]" Style="font-weight: bold;">@promo.Name</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Discount"]">
+                @(promo.DiscountType == DiscountType.Percentage ? $"{promo.DiscountValue:N2}%" : promo.DiscountValue.ToString("C"))
+            </MudTd>
+            <MudTd DataLabel="@StrLocalizer["Start Date"]">@promo.StartDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="@StrLocalizer["End Date"]">@promo.EndDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Status"]">
+                @if (!promo.IsActive || promo.EndDate < DateTimeOffset.UtcNow)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@StrLocalizer["Inactive"]</MudChip>
+                }
+                else if (promo.StartDate > DateTimeOffset.UtcNow)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">@StrLocalizer["Scheduled"]</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">@StrLocalizer["Active"]</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="@(() => OpenEditDialogAsync(promo))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => DeletePromotionAsync(promo))" />
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            <MudText>@StrLocalizer["No promotions found matching your search."]</MudText>
+        </NoRecordsContent>
+
+        <LoadingContent>
+            <MudText>@StrLocalizer["Loading..."]</MudText>
+        </LoadingContent>
+
+        <PagerContent>
+            <MudTablePager RowsPerPageString="@StrLocalizer["Rows per page:"]"
+                           InfoFormat="@StrLocalizer["{first_item}-{last_item} of {all_items}"]"
+                           AllItemsText="@StrLocalizer["All"]" />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    #region Fields
+    private MudTable<Promotion> _table = default!;
+    private string? _searchString;
+    private HashSet<Promotion> _selectedItems = new();
+    #endregion Fields
+
+    #region Methods
+    /// <summary>
+    /// Executes the server-side pagination and full-text search against the Dapper queries infrastructure.
+    /// </summary>
+    private async Task<TableData<Promotion>> LoadServerDataAsync(TableState state, CancellationToken cancellationToken)
+    {
+        int page = state.Page + 1;
+        int pageSize = state.PageSize;
+
+        PagedResult<Promotion> result = await PromotionQueries.GetPaginatedAsync(_searchString, page, pageSize, cancellationToken);
+
+        return new TableData<Promotion>()
+        {
+            TotalItems = result.TotalCount,
+            Items = result.Items
+        };
+    }
+
+    /// <summary>
+    /// Triggers a table reload when the user types in the search bar.
+    /// </summary>
+    private async Task OnSearchAsync(string text)
+    {
+        _searchString = string.IsNullOrWhiteSpace(text) ? null : text;
+        await _table.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Instantiates and displays the promotion dialogue for creating a new record.
+    /// </summary>
+    private async Task OpenCreateDialogAsync()
+    {
+        DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Medium };
+        DialogParameters parameters = new DialogParameters
+        {
+            { "IsEditing", false },
+            { "Model", new Promotion() }
+        };
+
+        IDialogReference dialog = await DialogService.ShowAsync<PromotionDialog>(StrLocalizer["New Promotion"], parameters, options);
+        DialogResult result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Instantiates and displays the promotion dialogue populated with an existing record for editing.
+    /// </summary>
+    private async Task OpenEditDialogAsync(Promotion promotion)
+    {
+        Promotion? fullPromotion = await PromotionQueries.GetByIdAsync(promotion.Id);
+
+        if (fullPromotion != null)
+        {
+            DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Medium };
+            DialogParameters parameters = new DialogParameters
+            {
+                { "IsEditing", true },
+                { "Model", fullPromotion }
+            };
+
+            IDialogReference dialog = await DialogService.ShowAsync<PromotionDialog>(StrLocalizer["Edit Promotion"], parameters, options);
+            DialogResult result = await dialog.Result;
+
+            if (!result.Canceled)
+            {
+                await _table.ReloadServerData();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and soft-deletes the specified promotion record.
+    /// </summary>
+    private async Task DeletePromotionAsync(Promotion promotion)
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Delete Promotion"],
+            $"{StrLocalizer["Are you sure you want to delete the promotion"]} '{promotion.Name}'?",
+            yesText: StrLocalizer["Delete"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Cancel"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            await PromotionRepository.DeleteAsync(promotion);
+            _selectedItems.Remove(promotion);
+            Snackbar.Add(StrLocalizer["Promotion deleted successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and bulk soft-deletes all selected promotions.
+    /// </summary>
+    private async Task DeleteSelectedPromotionsAsync()
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Bulk Delete"],
+            $"{StrLocalizer["Are you sure you want to delete the selected promotions"]} {_selectedItems.Count}?",
+            yesText: StrLocalizer["Delete All"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Cancel"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            foreach (Promotion promotion in _selectedItems)
+            {
+                await PromotionRepository.DeleteAsync(promotion);
+            }
+
+            _selectedItems.Clear();
+            Snackbar.Add(StrLocalizer["Selected promotions deleted successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+    #endregion Methods
+
+}

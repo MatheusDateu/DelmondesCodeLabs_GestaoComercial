@@ -1,0 +1,114 @@
+﻿@page "/Account/LoginWithRecoveryCode"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<LoginWithRecoveryCode> Logger
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Recovery Code"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardHeader Class="d-flex flex-column align-center pb-0">
+            <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Color="Color.Primary" Style="font-size: 4rem;" />
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="mt-2" Style="font-weight: bold;">
+                @StrLocalizer["Recovery Code Verification"]
+            </MudText>
+        </MudCardHeader>
+
+        <MudCardContent Class="pt-4">
+            <StatusMessage Message="@message" />
+
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                @StrLocalizer["You have requested to log in with a recovery code. This login will not be remembered until you provide an authenticator app code at log in."]
+            </MudAlert>
+
+            <EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <DataAnnotationsValidator />
+
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="Input.RecoveryCode"
+                                      For="@(() => Input.RecoveryCode)"
+                                      Label="@StrLocalizer["Recovery Code"]"
+                                      Variant="Variant.Outlined"
+                                      InputType="InputType.Text"
+                                      Required="true" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large" Style="color: #000000; font-weight: bold;">
+                            @StrLocalizer["Verify & Log In"].ToString().ToUpper()
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Fields
+    private string? message;
+    private ApplicationUser user = default!;
+    #endregion Fields
+
+    #region Properties
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await SignInManager.GetTwoFactorAuthenticationUserAsync() ??
+            throw new InvalidOperationException("Unable to load two-factor authentication user.");
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnValidSubmitAsync()
+    {
+        string recoveryCode = Input.RecoveryCode.Replace(" ", string.Empty);
+        SignInResult result = await SignInManager.TwoFactorRecoveryCodeSignInAsync(recoveryCode);
+        string userId = await UserManager.GetUserIdAsync(user);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User with ID '{UserId}' logged in with a recovery code.", userId);
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            Logger.LogWarning("Invalid recovery code entered for user with ID '{UserId}' ", userId);
+            message = $"{StrLocalizer["Error"]}: {StrLocalizer["Invalid recovery code entered."]}";
+        }
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "O código de recuperação é obrigatório.")]
+        [DataType(DataType.Text)]
+        public string RecoveryCode { get; set; } = string.Empty;
+    }
+    #endregion Models
+
+}

@@ -1,0 +1,45 @@
+﻿@page "/Error"
+@using System.Diagnostics
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Error"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-16 pt-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid #e50000; border-radius: 8px;">
+        <MudCardContent Class="d-flex flex-column align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Style="font-size: 5rem;" />
+            <MudText Typo="Typo.h5" Class="mt-4" Color="Color.Error" Style="font-weight: bold;">
+                @StrLocalizer["An error occurred"]
+            </MudText>
+
+            @if (ShowRequestId)
+            {
+                <MudText Typo="Typo.body1" Align="Align.Center" Class="mt-2">
+                    <strong>@StrLocalizer["Request ID"]:</strong> <code style="color: #03fa6e; background: #000; padding: 2px 6px; border-radius: 4px;">@RequestId</code>
+                </MudText>
+            }
+
+            <MudAlert Severity="Severity.Warning" Class="mt-6">
+                <strong>@StrLocalizer["Development Mode"]</strong><br />
+                @StrLocalizer["Swapping to"] <strong>Development</strong> @StrLocalizer["environment will display more detailed information about the error."]
+                @StrLocalizer["This shouldn't be enabled for deployed applications."]
+            </MudAlert>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Properties
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+    #endregion Properties
+
+    #region Lifecycle
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+    #endregion Lifecycle
+
+}

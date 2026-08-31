@@ -1,0 +1,185 @@
+﻿<region id="injections">
+    @inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+</region>
+
+<region id="style">
+    <style>
+            /* Customising the active NavLink for better UX and contrast */
+            .mud-nav-link.active {
+                background-color: var(--mud-palette-primary) !important;
+                color: #000000 !important;
+                border-radius: 4px;
+            }
+
+                .mud-nav-link.active .mud-nav-link-icon {
+                    color: #000000 !important; /* Icon colour to match text */
+                }
+
+                .mud-nav-link.active .mud-nav-link-text {
+                    font-weight: bold !important;
+                }
+    </style>
+</region>
+
+<region id="content">
+    <MudNavMenu Class="pa-2">
+
+        <region id="bi_dashboard-superuser_and_admin_only">
+            <AuthorizeView Roles="SuperUser, Admin">
+                <Authorized>
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Core Dashboard"]
+                    </MudText>
+                    <region id="region-links-dashboards">
+                        <MudNavLink title="@StrLocalizer["BI Dashboard"]" Href="/bi" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">@StrLocalizer["BI Dashboard"]</MudNavLink>
+                        <MudDivider Class="my-2" />
+                    </region>
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="sales-pos-and-history-specific-roles-per-feature">
+            <AuthorizeView Roles="SuperUser, Admin, Cashier, Waiter">
+                <Authorized>
+                    <!-- Submenu Title: All authenticated users -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Sales"]
+                    </MudText>
+                    <!-- Link - Point of Sale: All authenticated users -->
+                    <MudNavLink title="@StrLocalizer["Point of Sale"]" Href="/pos/terminal" Icon="@Icons.Material.Filled.PointOfSale">
+                        @StrLocalizer["Point of Sale"]
+                    </MudNavLink>
+                    <!-- Link - Sales History: SuperUser, Admin, Cashier -->
+                    <AuthorizeView Context="HistoryContext" Roles="SuperUser, Admin, Cashier">
+                        <Authorized>
+                            <!-- All users except Waiters -->
+                            <MudNavLink title="@StrLocalizer["Sales History"]" Href="/pos/sales" Icon="@Icons.Material.Filled.ReceiptLong">
+                                @StrLocalizer["Sales History"]
+                            </MudNavLink>
+                        </Authorized>
+                    </AuthorizeView>
+                    <!-- Sales Divisor - Same auth view role as Sales -->
+                    <MudDivider Class="my-2" />
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="marketing-superuser_and_admin_only">
+            <AuthorizeView Roles="SuperUser, Admin">
+                <Authorized>
+                    <!-- Submenu Title: Marketing -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Marketing"]
+                    </MudText>
+                    <!-- Link - Promotions -->
+                    <MudNavLink title="@StrLocalizer["Promotions"]" Href="/marketing/promotions" Icon="@Icons.Material.Filled.LocalOffer">
+                        @StrLocalizer["Promotions"]
+                    </MudNavLink>
+                    <MudDivider Class="my-2" />
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="catalog-superuser_and_admin_only">
+            <AuthorizeView Roles="SuperUser, Admin">
+                <Authorized>
+                    <!-- Submenu Title: Catalog -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Catalog"]
+                    </MudText>
+                    <!-- Link - Products -->
+                    <MudNavLink title="@StrLocalizer["Products"]" Href="/catalog/products" Icon="@Icons.Material.Filled.ShoppingBag">
+                        @StrLocalizer["Products"]
+                    </MudNavLink>
+                    <!-- Link - Categories -->
+                    <MudNavLink title="@StrLocalizer["Categories"]" Href="/catalog/categories" Icon="@Icons.Material.Filled.Bookmarks">
+                        @StrLocalizer["Categories"]
+                    </MudNavLink>
+                    <MudDivider Class="my-2" />
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="inventory-superuser_and_admin_only">
+            <!-- Inventory - Superuser and Admin only -->
+            <AuthorizeView Roles="SuperUser, Admin">
+                <Authorized>
+                    <!-- Submenu Title: Inventory -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Inventory"]
+                    </MudText>
+                    <!-- Link - Supplier -->
+                    <MudNavLink title="@StrLocalizer["Suppliers"]" Href="/inventory/suppliers" Icon="@Icons.Material.Filled.LocalShipping">
+                        @StrLocalizer["Suppliers"]
+                    </MudNavLink>
+                    <!-- Link - Entries -->
+                    <MudNavLink title="@StrLocalizer["Entries"]" Href="/inventory/entries" Icon="@Icons.Material.Filled.AddShoppingCart">
+                        @StrLocalizer["Entries"]
+                    </MudNavLink>
+                    <MudDivider Class="my-2" />
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="financial-superuser_and_admin_only">
+            <AuthorizeView Roles="SuperUser, Admin">
+                <Authorized>
+                    <!-- Submenu Title: Financial -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Financial"]
+                    </MudText>
+                    <!-- Link - Expenses -->
+                    <MudNavLink Href="/financial/expenses" Icon="@Icons.Material.Filled.AttachMoney">
+                        @StrLocalizer["Expenses"]
+                    </MudNavLink>
+
+                    <MudDivider Class="my-2" />
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="administration-superuser">
+            <AuthorizeView Roles="SuperUser">
+                <Authorized>
+                    <!-- Submenu Title: Administration -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Administration"]
+                    </MudText>
+                    <!-- Link - Team Management -->
+                    <MudNavLink title="@StrLocalizer["Team Management"]" Href="/admin/team" Icon="@Icons.Material.Filled.People">
+                        @StrLocalizer["Team Management"]
+                    </MudNavLink>
+
+                    <AuthorizeView Context="SuperUserContext" Roles="SuperUser">
+                        <Authorized>
+                            <!-- Link - Plans (SuperUser Only) -->
+                            <MudNavLink title="@StrLocalizer["Commercial Plans"]" Href="/admin/plans" Icon="@Icons.Material.Filled.CardMembership">
+                                @StrLocalizer["Commercial Plans"]
+                            </MudNavLink>
+                        </Authorized>
+                    </AuthorizeView>
+                    <MudDivider Class="my-2" />
+                </Authorized>
+            </AuthorizeView>
+        </region>
+
+        <region id="settings-all_authenticated_users">
+            <AuthorizeView>
+                <Authorized>
+                    <!-- Submenu Title: Settings -->
+                    <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mt-2 mb-1" Style="font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                        @StrLocalizer["Settings"]
+                    </MudText>
+                    <!-- Link - Account Management -->
+                    <MudNavLink title="@StrLocalizer["Account Management"]" Href="/Account/Manage" Icon="@Icons.Material.Filled.ManageAccounts">
+                        @StrLocalizer["Account Management"]
+                    </MudNavLink>
+                    <!-- Link - Contact -->
+                    <MudNavLink title="@StrLocalizer["Contact"]" Href="mailto:contato@delmondescodelabs.dpdns.org" Icon="@Icons.Material.Filled.Email">
+                        @StrLocalizer["Contact"]
+                    </MudNavLink>
+                </Authorized>
+            </AuthorizeView>
+        </region>
+    </MudNavMenu>
+</region>

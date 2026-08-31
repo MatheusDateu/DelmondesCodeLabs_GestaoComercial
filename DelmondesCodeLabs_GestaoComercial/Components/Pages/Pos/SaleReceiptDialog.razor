@@ -1,0 +1,108 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using Microsoft.Extensions.Localization
+
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <MudPaper Elevation="0" Class="pa-4" Style="background-color: var(--mud-palette-background-grey); border-radius: 8px;">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h6" Style="font-weight: bold; text-align: center;">@StrLocalizer["Receipt"]</MudText>
+                <MudText Typo="Typo.subtitle1" Style="text-align: center;">@Model.ReceiptNumber</MudText>
+                
+                @if (!string.IsNullOrWhiteSpace(Model.CustomerIdentifier))
+                {
+                    <MudText Typo="Typo.body2" Style="text-align: center; color: var(--mud-palette-primary);">
+                        @StrLocalizer["Customer Identification"]: @Model.CustomerIdentifier
+                    </MudText>
+                }
+                
+                <MudDivider Class="my-2" />
+
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Style="font-weight: bold;">@StrLocalizer["Date"]:</MudText>
+                        <MudText Typo="Typo.body2">@Model.SaleDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Style="font-weight: bold;">@StrLocalizer["Status"]:</MudText>
+                        <MudText Typo="Typo.body2">@StrLocalizer[Model.Status.ToString()]</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        </MudPaper>
+
+        <MudTable Items="Model.Items" Dense="true" Elevation="0" Class="mt-4" Style="border: 1px solid var(--mud-palette-lines-default);">
+            <HeaderContent>
+                <MudTh>@StrLocalizer["Product"]</MudTh>
+                <MudTh>@StrLocalizer["Qty"]</MudTh>
+                <MudTh>@StrLocalizer["Unit Price"]</MudTh>
+                <MudTh Style="text-align: center;">@StrLocalizer["Status"]</MudTh>
+                <MudTh Style="text-align: right">@StrLocalizer["Total"]</MudTh>
+            </HeaderContent>
+            <RowTemplate Context="item">
+                <MudTd DataLabel="@StrLocalizer["Product"]" Style="@(item.Status != SaleItemStatus.Active ? "text-decoration: line-through; color: gray;" : "")">
+                    @item.Product?.Name
+                </MudTd>
+                <MudTd DataLabel="@StrLocalizer["Qty"]">@item.Quantity.ToString("N3")</MudTd>
+                <MudTd DataLabel="@StrLocalizer["Unit Price"]">@item.UnitPrice.ToString("C")</MudTd>
+                <MudTd DataLabel="@StrLocalizer["Status"]" Style="text-align: center;">
+                    @if (item.Status == SaleItemStatus.Active)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" title="@StrLocalizer["Active"]" />
+                    }
+                    else if (item.Status == SaleItemStatus.Canceled)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Warning" Size="Size.Small" title="@StrLocalizer["Canceled"]" />
+                    }
+                    else if (item.Status == SaleItemStatus.Damaged)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.BrokenImage" Color="Color.Error" Size="Size.Small" title="@StrLocalizer["Damaged"]" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="@StrLocalizer["Total"]" Style="@(item.Status != SaleItemStatus.Active ? "text-align: right; text-decoration: line-through; color: gray;" : "text-align: right; font-weight: bold;")">
+                    @item.Total.ToString("C")
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudGrid Class="mt-4 px-2">
+            <MudItem xs="6"><MudText Typo="Typo.body1">@StrLocalizer["Subtotal"]:</MudText></MudItem>
+            <MudItem xs="6" Class="d-flex justify-end"><MudText Typo="Typo.body1">@Model.SubTotal.ToString("C")</MudText></MudItem>
+
+            <MudItem xs="6"><MudText Typo="Typo.body1" Color="Color.Error">@StrLocalizer["Discount"]:</MudText></MudItem>
+            <MudItem xs="6" Class="d-flex justify-end"><MudText Typo="Typo.body1" Color="Color.Error">- @Model.DiscountAmount.ToString("C")</MudText></MudItem>
+
+            <MudItem xs="6"><MudText Typo="Typo.h6" Style="font-weight: bold;">@StrLocalizer["Total"]:</MudText></MudItem>
+            <MudItem xs="6" Class="d-flex justify-end"><MudText Typo="Typo.h6" Style="font-weight: bold;">@Model.TotalAmount.ToString("C")</MudText></MudItem>
+
+            <MudItem xs="6"><MudText Typo="Typo.body2">@StrLocalizer["Payment Method"]:</MudText></MudItem>
+            <MudItem xs="6" Class="d-flex justify-end"><MudText Typo="Typo.body2">@StrLocalizer[Model.PaymentMethod.ToString()]</MudText></MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Variant="Variant.Filled" Color="Color.Primary" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Close"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Sale Model { get; set; } = default!;
+    #endregion Parameters
+
+    #region Methods
+    /// <summary>
+    /// Closes the receipt viewer dialogue.
+    /// </summary>
+    private void Close()
+    {
+        MudDialog.Close();
+    }
+    #endregion Methods
+}

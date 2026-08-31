@@ -1,0 +1,90 @@
+﻿@page "/Account/Manage/GenerateRecoveryCodes"
+
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<GenerateRecoveryCodes> Logger
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Generate Recovery Codes"] - Delmondes CodeLabs</PageTitle>
+
+@if (recoveryCodes is not null)
+{
+    <ShowRecoveryCodes RecoveryCodes="recoveryCodes.ToArray()" StatusMessage="@message" />
+}
+else
+{
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-error); border-radius: 8px;">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5" Color="Color.Error" Style="font-weight: bold;">@StrLocalizer["Generate 2FA Recovery Codes"]</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+
+        <MudCardContent>
+            <MudAlert Severity="Severity.Warning" Class="mb-6">
+                <strong>@StrLocalizer["Put these codes in a safe place."]</strong><br /><br />
+                @StrLocalizer["If you lose your device and don't have the recovery codes you will lose access to your account."]<br />
+                @StrLocalizer["Generating new recovery codes does not change the keys used in authenticator apps. If you wish to change the key used in an authenticator app, you should"] <MudLink Href="Account/Manage/ResetAuthenticator" Underline="Underline.Always">@StrLocalizer["reset your authenticator keys."]</MudLink>
+            </MudAlert>
+
+            <form @formname="generate-recovery-codes" @onsubmit="OnSubmitAsync" method="post">
+                <button type="submit" class="mud-native-btn" style="background-color: var(--mud-palette-error); color: #ffffff;">
+                    @StrLocalizer["GENERATE RECOVERY CODES"]
+                </button>
+            </form>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    #region Fields
+    private string? message;
+    private ApplicationUser? user;
+    private IEnumerable<string>? recoveryCodes;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        bool isTwoFactorEnabled = await UserManager.GetTwoFactorEnabledAsync(user);
+        if (!isTwoFactorEnabled)
+        {
+            throw new InvalidOperationException("Cannot generate recovery codes for user because they do not have 2FA enabled.");
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        string userId = await UserManager.GetUserIdAsync(user);
+        recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+        message = StrLocalizer["You have generated new recovery codes."];
+
+        Logger.LogInformation("User with ID '{UserId}' has generated new 2FA recovery codes.", userId);
+    }
+    #endregion Methods
+
+}

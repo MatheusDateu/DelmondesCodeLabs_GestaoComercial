@@ -1,0 +1,160 @@
+﻿@page "/pos/sales"
+@attribute [Authorize(Roles = "SuperUser, Admin, Cashier")]
+
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+
+@inject ISaleQueries SaleQueries
+@inject ISaleRepository SaleRepository
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Sales History"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-6 px-2 flex-wrap">
+        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;">
+            @StrLocalizer["Sales History"]
+        </MudText>
+
+        <MudSpacer />
+    </MudStack>
+
+    <MudTable ServerData="LoadServerDataAsync" Dense="true" Hover="true" @ref="_table" Elevation="4" Style="border-top: 4px solid var(--mud-palette-success); border-radius: 8px;" Breakpoint="Breakpoint.Sm" HorizontalScrollbar="true">
+        <ToolBarContent>
+            <MudSpacer />
+            <MudTextField T="string" ValueChanged="@(s => OnSearchAsync(s))" Placeholder="@StrLocalizer["Search by receipt number..."]" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+        </ToolBarContent>
+
+        <HeaderContent>
+            <MudTh>@StrLocalizer["Receipt"]</MudTh>
+            <MudTh>@StrLocalizer["Date"]</MudTh>
+            <MudTh>@StrLocalizer["Total"]</MudTh>
+            <MudTh>@StrLocalizer["Payment Method"]</MudTh>
+            <MudTh>@StrLocalizer["Status"]</MudTh>
+            <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+        </HeaderContent>
+
+        <RowTemplate Context="sale">
+            <MudTd DataLabel="@StrLocalizer["Receipt"]" Style="font-weight: bold;">@sale.ReceiptNumber</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Date"]">@sale.SaleDate.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Total"]" Style="font-weight: bold; color: var(--mud-palette-success);">
+                @sale.TotalAmount.ToString("C")
+            </MudTd>
+            <MudTd DataLabel="@StrLocalizer["Payment Method"]">@StrLocalizer[sale.PaymentMethod.ToString()]</MudTd>
+            <MudTd DataLabel="@StrLocalizer["Status"]">
+                @if (sale.Status == SaleStatus.Completed)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">@StrLocalizer["Completed"]</MudChip>
+                }
+                else if (sale.Status == SaleStatus.Cancelled)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">@StrLocalizer["Cancelled"]</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">@StrLocalizer["Pending"]</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                <MudIconButton Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Info" Size="Size.Small" OnClick="@(() => OpenReceiptDialogAsync(sale))" title="@StrLocalizer["View Receipt"]" />
+                @if (sale.Status != SaleStatus.Cancelled)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" OnClick="@(() => CancelSaleAsync(sale))" title="@StrLocalizer["Cancel Sale"]" />
+                }
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            <MudText>@StrLocalizer["No sales found matching your search."]</MudText>
+        </NoRecordsContent>
+
+        <LoadingContent>
+            <MudText>@StrLocalizer["Loading..."]</MudText>
+        </LoadingContent>
+
+        <PagerContent>
+            <MudTablePager RowsPerPageString="@StrLocalizer["Rows per page:"]"
+                           InfoFormat="@StrLocalizer["{first_item}-{last_item} of {all_items}"]"
+                           AllItemsText="@StrLocalizer["All"]" />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    #region Fields
+    private MudTable<Sale> _table = default!;
+    private string? _searchString;
+    #endregion Fields
+
+    #region Methods
+    /// <summary>
+    /// Executes the server-side pagination and full-text search against the Dapper queries infrastructure.
+    /// </summary>
+    private async Task<TableData<Sale>> LoadServerDataAsync(TableState state, CancellationToken cancellationToken)
+    {
+        int page = state.Page + 1;
+        int pageSize = state.PageSize;
+
+        PagedResult<Sale> result = await SaleQueries.GetPaginatedAsync(_searchString, page, pageSize, cancellationToken);
+
+        return new TableData<Sale>()
+        {
+            TotalItems = result.TotalCount,
+            Items = result.Items
+        };
+    }
+
+    /// <summary>
+    /// Triggers a table reload when the user types in the search bar.
+    /// </summary>
+    private async Task OnSearchAsync(string text)
+    {
+        _searchString = string.IsNullOrWhiteSpace(text) ? null : text;
+        await _table.ReloadServerData();
+    }
+
+    /// <summary>
+    /// Opens the dialogue in read-only mode to view the sale receipt.
+    /// </summary>
+    private async Task OpenReceiptDialogAsync(Sale sale)
+    {
+        Sale? fullSale = await SaleQueries.GetByIdAsync(sale.Id);
+
+        if (fullSale != null)
+        {
+            DialogOptions options = new DialogOptions { CloseOnEscapeKey = true, FullWidth = true, MaxWidth = MaxWidth.Small };
+            DialogParameters parameters = new DialogParameters
+            {
+                { "Model", fullSale }
+            };
+
+            await DialogService.ShowAsync<SaleReceiptDialog>($"{StrLocalizer["Receipt"]}: {fullSale.ReceiptNumber}", parameters, options);
+        }
+    }
+
+    /// <summary>
+    /// Prompts the user for confirmation and cancels the specified sale.
+    /// </summary>
+    private async Task CancelSaleAsync(Sale sale)
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            StrLocalizer["Cancel Sale"],
+            $"{StrLocalizer["Are you sure you want to cancel the sale"]} '{sale.ReceiptNumber}'?",
+            yesText: StrLocalizer["Yes"].ToString().ToUpper(),
+            cancelText: StrLocalizer["No"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            // Note: In a complete implementation, this should also reverse stock movements.
+            await SaleRepository.DeleteAsync(sale);
+            Snackbar.Add(StrLocalizer["Sale cancelled successfully."], Severity.Success);
+            await _table.ReloadServerData();
+        }
+    }
+    #endregion Methods
+
+}

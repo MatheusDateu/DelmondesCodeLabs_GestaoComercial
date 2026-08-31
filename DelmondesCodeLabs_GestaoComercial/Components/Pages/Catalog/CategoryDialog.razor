@@ -1,0 +1,78 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+
+@inject ICategoryRepository CategoryRepository
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Model" OnValidSubmit="OnValidSubmitAsync" id="categoryForm" FormName="CategoryForm">
+            <DataAnnotationsValidator />
+
+            <MudTextField @bind-Value="Model.Name"
+                          For="@(() => Model.Name)"
+                          Label=@StrLocalizer["Category Name"]
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          Class="mb-3" />
+
+            <MudTextField @bind-Value="Model.Description"
+                          For="@(() => Model.Description)"
+                          Label=@StrLocalizer["Description"]
+                          Variant="Variant.Outlined"
+                          Lines="3"
+                          Class="mb-1" />
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@StrLocalizer["Cancel"].ToString().ToUpper()</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" ButtonType="ButtonType.Submit" form="categoryForm" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Save"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Category Model { get; set; } = new();
+
+    [Parameter]
+    public bool IsEditing { get; set; }
+    #endregion Parameters
+
+    #region Methods
+    /// <summary>
+    /// Processes the submission of the category form, delegating to the appropriate repository command.
+    /// </summary>
+    private async Task OnValidSubmitAsync()
+    {
+        if (IsEditing)
+        {
+            await CategoryRepository.UpdateAsync(Model);
+            Snackbar.Add(@StrLocalizer["Category updated successfully."], Severity.Success);
+        }
+        else
+        {
+            await CategoryRepository.AddAsync(Model);
+            Snackbar.Add(@StrLocalizer["Category created successfully."], Severity.Success);
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Closes the dialogue without saving any changes.
+    /// </summary>
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    #endregion Methods
+
+}

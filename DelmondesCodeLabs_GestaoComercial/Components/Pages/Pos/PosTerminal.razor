@@ -1,0 +1,644 @@
+﻿@page "/pos/terminal"
+@attribute [Authorize(Roles = "SuperUser, Admin, Cashier, Waiter")]
+
+@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Localization
+
+@inject ISaleQueries SaleQueries
+@inject ISaleRepository SaleRepository
+@inject IProductQueries ProductQueries
+@inject IProductRepository ProductRepository
+@inject IStockMovementRepository StockMovementRepository
+@inject IProductCompositionQueries CompositionQueries
+@inject IPromotionQueries PromotionQueries
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Point of Sale"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+    <MudTabs Elevation="4" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" @bind-ActivePanelIndex="_activeTabIndex">
+
+        <!-- TAB 1: TERMINAL & COMANDA ATUAL -->
+        <MudTabPanel Text="@StrLocalizer["Current Tab"]" Icon="@Icons.Material.Filled.PointOfSale">
+            <MudGrid Spacing="3">
+
+                <!-- Left Side: Identification & Product Search -->
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 8px;">
+                        <MudText Typo="Typo.h6" Color="Color.Primary" Style="font-weight: bold;" Class="mb-4">
+                            @StrLocalizer["Customer Identification"]
+                        </MudText>
+
+                        <MudTextField @bind-Value="CurrentSale.CustomerIdentifier"
+                                      Label="@StrLocalizer["Tab Identifier (Table, Name, Nickname)"]"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      Immediate="true"
+                                      tabindex="1"
+                                      Class="mb-4" />
+
+                        <MudDivider Class="my-4" />
+
+                        <MudAutocomplete T="Product"
+                                         Label="@StrLocalizer["Search Product (Name, SKU, Barcode)"]"
+                                         SearchFunc="@SearchProductsAsync"
+                                         ToStringFunc="@(p => p == null ? null : $"{p.Name} - {p.SellingPrice:C} ({StrLocalizer["Stock"]}: {p.CurrentStock:N2})")"
+                                         ValueChanged="OnProductSelected"
+                                         Clearable="true"
+                                         tabindex="2"
+                                         Variant="Variant.Outlined"
+                                         AdornmentIcon="@Icons.Material.Filled.Search"
+                                         Disabled="@(string.IsNullOrWhiteSpace(CurrentSale.CustomerIdentifier))" />
+
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="mt-2">
+                            @StrLocalizer["You must identify the tab before adding products."]
+                        </MudAlert>
+                    </MudPaper>
+
+                    <!-- Active Promotions Panel -->
+                    <MudExpansionPanels Elevation="0" Style="border: 1px solid var(--mud-palette-secondary); border-radius: 8px;">
+                        <MudExpansionPanel Text="@StrLocalizer["Active Promotions"]" Icon="@Icons.Material.Filled.LocalOffer" Style="color: var(--mud-palette-secondary); font-weight: bold;">
+                            <MudText Typo="Typo.body2" Class="mb-2">
+                                @StrLocalizer["Check the active campaigns below and apply the discount manually in the cart if applicable."]
+                            </MudText>
+
+                            @if (_activePromotions != null && _activePromotions.Any())
+                            {
+                                @foreach (Promotion promo in _activePromotions)
+                                {
+                                    string discountText = promo.DiscountType == DiscountType.Percentage
+                                        ? $"{promo.DiscountValue:N2}%"
+                                        : promo.DiscountValue.ToString("C");
+
+                                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-1">
+                                        @promo.Name - @StrLocalizer["Discount"]: @discountText
+                                    </MudAlert>
+                                }
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                    @StrLocalizer["No active promotions at the moment."]
+                                </MudAlert>
+                            }
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                </MudItem>
+
+                <!-- Right Side: Cart, Exceptions & Checkout -->
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 8px; height: 100%;">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                            <MudText Typo="Typo.h6" Style="font-weight: bold;">
+                                @StrLocalizer["Cart Details"]
+                            </MudText>
+                            @if (!string.IsNullOrWhiteSpace(CurrentSale.ReceiptNumber))
+                            {
+                                <MudChip T="string" Color="Color.Info" Size="Size.Small">@CurrentSale.ReceiptNumber</MudChip>
+                            }
+                        </MudStack>
+
+                        <EditForm Model="CurrentSale" OnValidSubmit="SettleTabAsync" FormName="PosTerminalForm">
+                            <DataAnnotationsValidator />
+
+                            <MudTable Items="CurrentSale.Items" Dense="true" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default); max-height: 350px; overflow-y: auto;" Class="mb-4">
+                                <HeaderContent>
+                                    <MudTh>@StrLocalizer["Product"]</MudTh>
+                                    <MudTh>@StrLocalizer["Qty"]</MudTh>
+                                    <MudTh>@StrLocalizer["Total"]</MudTh>
+                                    <MudTh Style="text-align: center;">@StrLocalizer["Status"]</MudTh>
+                                    <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="item">
+                                    <MudTd DataLabel="@StrLocalizer["Product"]" Style="@(item.Status != SaleItemStatus.Active ? "text-decoration: line-through; color: gray;" : "")">
+                                        @item.Product?.Name
+                                    </MudTd>
+                                    <MudTd DataLabel="@StrLocalizer["Qty"]">
+                                        @if (item.Id == Guid.Empty && item.Status == SaleItemStatus.Active)
+                                        {
+                                            <MudNumericField Value="@item.Quantity" ValueChanged="@((decimal v) => UpdateItemQuantity(item, v))" Min="0.001m" Variant="Variant.Text" Margin="Margin.Dense" HideSpinButtons="true" />
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2">@item.Quantity.ToString("N3")</MudText>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="@StrLocalizer["Total"]" Style="font-weight: bold;">
+                                        @item.Total.ToString("C")
+                                    </MudTd>
+                                    <MudTd DataLabel="@StrLocalizer["Status"]" Style="text-align: center;">
+                                        @if (item.Status == SaleItemStatus.Active)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" title="@StrLocalizer["Active"]" />
+                                        }
+                                        else if (item.Status == SaleItemStatus.Canceled)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Warning" Size="Size.Small" title="@StrLocalizer["Canceled"]" />
+                                        }
+                                        else if (item.Status == SaleItemStatus.Damaged)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.BrokenImage" Color="Color.Error" Size="Size.Small" title="@StrLocalizer["Damaged"]" />
+                                        }
+                                    </MudTd>
+                                    <MudTd Style="text-align: right">
+                                        @if (item.Id == Guid.Empty)
+                                        {
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveUnsavedItem(item))" title="@StrLocalizer["Remove Item"]" />
+                                        }
+                                        else if (item.Status == SaleItemStatus.Active)
+                                        {
+                                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                                                <MudMenuItem OnClick="@(() => HandleItemExceptionAsync(item, SaleItemStatus.Canceled))">
+                                                    <MudText Color="Color.Warning">@StrLocalizer["Cancel Item (Return Stock)"]</MudText>
+                                                </MudMenuItem>
+                                                <MudMenuItem OnClick="@(() => HandleItemExceptionAsync(item, SaleItemStatus.Damaged))">
+                                                    <MudText Color="Color.Error">@StrLocalizer["Mark as Damaged (Loss)"]</MudText>
+                                                </MudMenuItem>
+                                            </MudMenu>
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                                <NoRecordsContent>
+                                    <MudText Typo="Typo.body2" Class="pa-4 text-center">@StrLocalizer["No items in this tab."]</MudText>
+                                </NoRecordsContent>
+                            </MudTable>
+
+                            <MudGrid Spacing="1" Class="mb-3 align-center">
+                                <MudItem xs="6"><MudText Typo="Typo.subtitle1">@StrLocalizer["Subtotal"]:</MudText></MudItem>
+                                <MudItem xs="6" Class="d-flex justify-end"><MudText Typo="Typo.subtitle1" Style="font-weight: bold;">@CurrentSale.SubTotal.ToString("C")</MudText></MudItem>
+
+                                <MudItem xs="12" sm="5"><MudText Typo="Typo.subtitle1">@StrLocalizer["Discount"]:</MudText></MudItem>
+                                <MudItem xs="12" sm="7" Class="d-flex gap-2">
+                                    <!-- Global discount type toggle -->
+                                    <MudSelect T="DiscountType" Value="_globalDiscountType" ValueChanged="UpdateDiscountType" Variant="Variant.Outlined" Margin="Margin.Dense" tabindex="3" Style="width: 80px;">
+                                        <MudSelectItem T="DiscountType" Value="DiscountType.FixedValue">R$</MudSelectItem>
+                                        <MudSelectItem T="DiscountType" Value="DiscountType.Percentage">%</MudSelectItem>
+                                    </MudSelect>
+                                    <MudNumericField T="decimal" Value="_globalDiscountInput" ValueChanged="UpdateDiscountInput" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0m" tabindex="4" />
+                                </MudItem>
+
+                                <MudItem xs="6" Class="mt-2"><MudText Typo="Typo.h5" Color="Color.Success" Style="font-weight: bold;">@StrLocalizer["Total"]:</MudText></MudItem>
+                                <MudItem xs="6" Class="d-flex justify-end mt-2"><MudText Typo="Typo.h5" Color="Color.Success" Style="font-weight: bold;">@CurrentSale.TotalAmount.ToString("C")</MudText></MudItem>
+                            </MudGrid>
+
+                            <MudSelect @bind-Value="CurrentSale.PaymentMethod" Label="@StrLocalizer["Payment Method"]" Variant="Variant.Outlined" Required="true" Class="mb-4" tabindex="5">
+                                @foreach (PaymentMethod method in Enum.GetValues<PaymentMethod>())
+                                {
+                                    <MudSelectItem Value="@method">@StrLocalizer[method.ToString()]</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <MudStack Row="true" Spacing="2">
+                                <!-- Action Buttons -->
+                                <!-- Button - Save Tab: All authenticated users -->
+                                <MudButton OnClick="SaveTabAsync" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Size="Size.Large" Disabled="@(!CurrentSale.Items.Any() || string.IsNullOrWhiteSpace(CurrentSale.CustomerIdentifier))" tabindex="6">
+                                    @StrLocalizer["Save Tab"].ToString().ToUpper()
+                                </MudButton>
+                                <!-- Button - Settle Tab: All authenticated users except WAITERS -->
+                                <AuthorizeView Context="SettleContext">
+                                    <Authorized>
+                                        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Success" FullWidth="true" Size="Size.Large" Style="font-weight: bold;" Disabled="@(!CurrentSale.Items.Any() || CurrentSale.PaymentMethod == PaymentMethod.Pending)" tabindex="7">
+                                            @StrLocalizer["Settle Tab"].ToString().ToUpper()
+                                        </MudButton>
+                                    </Authorized>
+                                </AuthorizeView>
+                            </MudStack>
+                        </EditForm>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- TAB 2: COMANDAS ABERTAS -->
+        <MudTabPanel Text="@StrLocalizer["Open Tabs"]" Icon="@Icons.Material.Filled.FormatListBulleted" OnClick="LoadOpenTabsAsync">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 8px;">
+                <MudTextField @bind-Value="_openTabsSearchTerm"
+                              Placeholder="@StrLocalizer["Search Open Tabs..."]"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Clearable="true"
+                              OnKeyUp="LoadOpenTabsAsync"
+                              Class="mb-4" />
+
+                @if (_isLoadingTabs)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+                }
+                else if (!_openTabs.Any())
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Text">@StrLocalizer["No open tabs found."]</MudAlert>
+                }
+                else
+                {
+                    <MudGrid Spacing="2">
+                        @foreach (Sale tab in _openTabs)
+                        {
+                            <MudItem xs="12" sm="6" md="4" lg="3">
+                                <MudCard Elevation="2" Style="border-left: 4px solid var(--mud-palette-warning);">
+                                    <MudCardContent>
+                                        <MudText Typo="Typo.h6" Style="font-weight: bold;">@tab.CustomerIdentifier</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@StrLocalizer["Last Updated"]: @(tab.UpdatedAt?.ToLocalTime().ToString("HH:mm") ?? tab.SaleDate.ToLocalTime().ToString("HH:mm"))</MudText>
+                                        <MudText Typo="Typo.h6" Color="Color.Success" Class="mt-2">@tab.TotalAmount.ToString("C")</MudText>
+                                    </MudCardContent>
+                                    <MudCardActions Class="d-flex justify-end">
+                                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenExistingTabAsync(tab.Id))">
+                                            @StrLocalizer["Edit Tab"]
+                                        </MudButton>
+                                    </MudCardActions>
+                                </MudCard>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+            </MudPaper>
+        </MudTabPanel>
+
+    </MudTabs>
+</MudContainer>
+
+@code {
+    #region Fields
+    private int _activeTabIndex = 0;
+    private string? _openTabsSearchTerm;
+    private bool _isLoadingTabs = false;
+    private IEnumerable<Sale> _openTabs = new List<Sale>();
+    private IEnumerable<Promotion> _activePromotions = new List<Promotion>();
+    private decimal _globalDiscountInput = 0m;
+    private DiscountType _globalDiscountType = DiscountType.FixedValue;
+    #endregion Fields
+
+    #region Properties
+    private Sale CurrentSale { get; set; } = new Sale();
+    #endregion Properties
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the POS terminal by loading active promotions for the auto-discount engine.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        _activePromotions = await PromotionQueries.GetActivePromotionsAsync();
+    }
+    #endregion Lifecycle
+
+    #region Methods - Core Terminal Logic
+    /// <summary>
+    /// Searches for active products based on the user's input.
+    /// </summary>
+    private async Task<IEnumerable<Product>> SearchProductsAsync(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Array.Empty<Product>();
+        PagedResult<Product> result = await ProductQueries.SearchProductsAsync(value, 1, 20, cancellationToken);
+        return result.Items.Where(p => p.IsActive);
+    }
+
+    /// <summary>
+    /// Calculates the best applicable promotion for a specific product based on active campaigns.
+    /// </summary>
+    private decimal CalculateUnitDiscount(Product product)
+    {
+        if (_activePromotions == null || !_activePromotions.Any()) return 0m;
+
+        var applicablePromos = _activePromotions.Where(p =>
+            p.Items.Any(pi => pi.ProductId == product.Id || pi.CategoryId == product.CategoryId));
+
+        if (!applicablePromos.Any()) return 0m;
+
+        // Select the promotion that grants the highest monetary discount to the customer
+        var bestPromo = applicablePromos.OrderByDescending(p =>
+            p.DiscountType == DiscountType.Percentage
+                ? product.SellingPrice * (p.DiscountValue / 100m)
+                : p.DiscountValue).First();
+
+        return bestPromo.DiscountType == DiscountType.Percentage
+            ? product.SellingPrice * (bestPromo.DiscountValue / 100m)
+            : bestPromo.DiscountValue;
+    }
+
+    /// <summary>
+    /// Handles the selection of a product, validating stock rules and applying automatic discounts.
+    /// </summary>
+    private void OnProductSelected(Product? product)
+    {
+        if (product == null) return;
+
+        // Security Lock: Prevent selling out-of-stock items (except for services)
+        if (product.Type != ProductType.Service && product.CurrentStock <= 0)
+        {
+            Snackbar.Add(StrLocalizer["This product is currently out of stock!"], Severity.Error);
+            return;
+        }
+
+        SaleItem? existingItem = CurrentSale.Items.FirstOrDefault(i => i.ProductId == product.Id && i.Id == Guid.Empty);
+        decimal unitDiscount = CalculateUnitDiscount(product);
+
+        if (existingItem != null)
+        {
+            if (product.Type != ProductType.Service && (existingItem.Quantity + 1) > product.CurrentStock)
+            {
+                Snackbar.Add(StrLocalizer["Cannot add more items than available in stock."], Severity.Warning);
+                return;
+            }
+
+            existingItem.Quantity += 1m;
+            existingItem.DiscountAmount = unitDiscount * existingItem.Quantity;
+            existingItem.Total = (existingItem.Quantity * existingItem.UnitPrice) - existingItem.DiscountAmount;
+        }
+        else
+        {
+            CurrentSale.Items.Add(new SaleItem
+            {
+                ProductId = product.Id,
+                Product = product,
+                Quantity = 1m,
+                UnitPrice = product.SellingPrice,
+                DiscountAmount = unitDiscount,
+                Total = product.SellingPrice - unitDiscount,
+                Status = SaleItemStatus.Active
+            });
+        }
+        RecalculateCart();
+    }
+
+    private void UpdateItemQuantity(SaleItem item, decimal newQuantity)
+    {
+        if (newQuantity <= 0) return;
+
+        // Security Lock: Check stock bounds on manual quantity edit
+        if (item.Product != null && item.Product.Type != ProductType.Service && newQuantity > item.Product.CurrentStock)
+        {
+            Snackbar.Add(StrLocalizer["Cannot set quantity higher than available stock."], Severity.Warning);
+            item.Quantity = item.Product.CurrentStock; // Reset to max available
+        }
+        else
+        {
+            item.Quantity = newQuantity;
+        }
+
+        decimal unitDiscount = CalculateUnitDiscount(item.Product!);
+        item.DiscountAmount = unitDiscount * item.Quantity;
+        item.Total = (item.Quantity * item.UnitPrice) - item.DiscountAmount;
+
+        RecalculateCart();
+    }
+
+    private void RemoveUnsavedItem(SaleItem item)
+    {
+        CurrentSale.Items.Remove(item);
+        RecalculateCart();
+    }
+
+    private void UpdateDiscountType(DiscountType type)
+    {
+        _globalDiscountType = type;
+        RecalculateCart();
+    }
+
+    private void UpdateDiscountInput(decimal value)
+    {
+        _globalDiscountInput = value;
+        RecalculateCart();
+    }
+
+    /// <summary>
+    /// Computes the final totals, factoring in both item-level automatic promos and the global manual discount.
+    /// </summary>
+    private void RecalculateCart()
+    {
+        // Subtotal equals the sum of the items AFTER their individual automatic promotions are applied
+        CurrentSale.SubTotal = CurrentSale.Items.Where(i => i.Status == SaleItemStatus.Active).Sum(i => i.Total);
+
+        if (_globalDiscountType == DiscountType.Percentage)
+        {
+            CurrentSale.DiscountAmount = CurrentSale.SubTotal * (_globalDiscountInput / 100m);
+        }
+        else
+        {
+            CurrentSale.DiscountAmount = _globalDiscountInput;
+        }
+
+        CurrentSale.TotalAmount = CurrentSale.SubTotal - CurrentSale.DiscountAmount;
+        if (CurrentSale.TotalAmount < 0) CurrentSale.TotalAmount = 0;
+    }
+    #endregion Methods - Core Terminal Logic
+
+    #region Methods - Open Tabs & Persistence
+    /// <summary>
+    /// Loads the list of pending open tabs from the database.
+    /// </summary>
+    private async Task LoadOpenTabsAsync()
+    {
+        _isLoadingTabs = true;
+        _openTabs = await SaleQueries.GetOpenTabsAsync(_openTabsSearchTerm);
+        _isLoadingTabs = false;
+    }
+
+    /// <summary>
+    /// Loads a specific open tab into the terminal for editing.
+    /// </summary>
+    private async Task OpenExistingTabAsync(Guid saleId)
+    {
+        Sale? tab = await SaleQueries.GetByIdAsync(saleId);
+        if (tab != null)
+        {
+            CurrentSale = tab;
+            _activeTabIndex = 0; // Switch to terminal tab
+
+            // Populate the UI with the existing global discount amount, defaulting the toggle to Fixed Value to avoid reverse-percentage math complexity
+            _globalDiscountInput = CurrentSale.DiscountAmount;
+            _globalDiscountType = DiscountType.FixedValue;
+
+            RecalculateCart();
+        }
+    }
+
+    /// <summary>
+    /// Saves the current state of the tab (Pending). Deducts stock ONLY for newly added items.
+    /// </summary>
+    private async Task SaveTabAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentSale.CustomerIdentifier))
+        {
+            Snackbar.Add(StrLocalizer["Please identify the tab before saving."], Severity.Warning);
+            return;
+        }
+
+        CurrentSale.Status = SaleStatus.Pending;
+
+        // Identify items that are new and haven't had their stock deducted yet
+        List<SaleItem> newItems = CurrentSale.Items.Where(i => i.Id == Guid.Empty && i.Status == SaleItemStatus.Active).ToList();
+
+        if (CurrentSale.Id == Guid.Empty)
+        {
+            CurrentSale.ReceiptNumber = $"TAB-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+            await SaleRepository.AddAsync(CurrentSale);
+        }
+        else
+        {
+            await SaleRepository.UpdateAsync(CurrentSale);
+        }
+
+        // Deduct stock for the newly added items
+        foreach (SaleItem item in newItems)
+        {
+            await ProcessStockDeductionAsync(item, $"Added to Tab: {CurrentSale.CustomerIdentifier}");
+        }
+
+        Snackbar.Add(StrLocalizer["Tab saved successfully."], Severity.Success);
+
+        // Reset and reload tabs
+        CurrentSale = new Sale();
+        _globalDiscountInput = 0m;
+        await LoadOpenTabsAsync();
+        _activeTabIndex = 1; // Switch to Open Tabs view
+    }
+
+    /// <summary>
+    /// Settles the tab, marking it as completed. Payment Method must be provided.
+    /// </summary>
+    private async Task SettleTabAsync()
+    {
+        if (CurrentSale.PaymentMethod == PaymentMethod.Pending)
+        {
+            Snackbar.Add(StrLocalizer["Please select a valid payment method to settle the tab."], Severity.Warning);
+            return;
+        }
+
+        CurrentSale.Status = SaleStatus.Completed;
+
+        // The save process will deduct stock for any unsaved items remaining on the screen
+        await SaveTabAsync();
+
+        Snackbar.Add(StrLocalizer["Tab settled and closed successfully."], Severity.Success);
+    }
+    #endregion Methods - Open Tabs & Persistence
+
+    #region Methods - Exception Workflows (Avaria / Cancel)
+    /// <summary>
+    /// Handles the cancellation or damage registration of an ALREADY SAVED item.
+    /// </summary>
+    private async Task HandleItemExceptionAsync(SaleItem item, SaleItemStatus targetStatus)
+    {
+        string title = targetStatus == SaleItemStatus.Canceled ? StrLocalizer["Cancel Item"] : StrLocalizer["Mark as Damaged"];
+        string message = targetStatus == SaleItemStatus.Canceled
+            ? StrLocalizer["Are you sure you want to cancel this item? Stock will be returned."]
+            : StrLocalizer["Are you sure you want to mark this item as damaged? Stock will be logged as a loss."];
+
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            title,
+            message,
+            yesText: StrLocalizer["Confirm"].ToString().ToUpper(),
+            cancelText: StrLocalizer["Back"].ToString().ToUpper());
+
+        if (confirm == true)
+        {
+            item.Status = targetStatus;
+            RecalculateCart();
+
+            // Persist the status change
+            await SaleRepository.UpdateAsync(CurrentSale);
+
+            if (targetStatus == SaleItemStatus.Canceled)
+            {
+                await ProcessStockReturnAsync(item, $"Canceled from Tab: {CurrentSale.CustomerIdentifier}");
+                Snackbar.Add(StrLocalizer["Item canceled and stock returned."], Severity.Warning);
+            }
+            else if (targetStatus == SaleItemStatus.Damaged)
+            {
+                await ProcessStockLossAsync(item, $"Damaged in Tab: {CurrentSale.CustomerIdentifier}");
+                Snackbar.Add(StrLocalizer["Item marked as damaged and logged as loss."], Severity.Error);
+            }
+        }
+    }
+
+    private async Task ProcessStockDeductionAsync(SaleItem item, string reason)
+    {
+        if (item.Product == null) return;
+
+        if (item.Product.Type == ProductType.Standard || item.Product.Type == ProductType.Component)
+        {
+            await RegisterMovementAsync(item.ProductId, item.Quantity, MovementType.Sale, reason);
+        }
+        else if (item.Product.Type == ProductType.Service)
+        {
+            IEnumerable<ProductComposition> comps = await CompositionQueries.GetByParentProductIdAsync(item.ProductId);
+            foreach (ProductComposition comp in comps)
+            {
+                await RegisterMovementAsync(comp.ChildProductId, comp.Quantity * item.Quantity, MovementType.Sale, $"{reason} (BOM Component)");
+            }
+        }
+    }
+
+    private async Task ProcessStockReturnAsync(SaleItem item, string reason)
+    {
+        if (item.Product == null) return;
+
+        if (item.Product.Type == ProductType.Standard || item.Product.Type == ProductType.Component)
+        {
+            // Note: Returning stock uses Entry
+            await RegisterMovementAsync(item.ProductId, item.Quantity, MovementType.Entry, reason, updateStockProjection: true, isReturn: true);
+        }
+        else if (item.Product.Type == ProductType.Service)
+        {
+            IEnumerable<ProductComposition> comps = await CompositionQueries.GetByParentProductIdAsync(item.ProductId);
+            foreach (ProductComposition comp in comps)
+            {
+                await RegisterMovementAsync(comp.ChildProductId, comp.Quantity * item.Quantity, MovementType.Entry, $"{reason} (BOM Return)", updateStockProjection: true, isReturn: true);
+            }
+        }
+    }
+
+    private async Task ProcessStockLossAsync(SaleItem item, string reason)
+    {
+        if (item.Product == null) return;
+
+        if (item.Product.Type == ProductType.Standard || item.Product.Type == ProductType.Component)
+        {
+            // Note: Loss is registered, but projection was already deducted when the item was first sold/added to tab.
+            // We do NOT deduct projection again to avoid double counting the missing physical item.
+            await RegisterMovementAsync(item.ProductId, item.Quantity, MovementType.Loss, reason, updateStockProjection: false);
+        }
+        else if (item.Product.Type == ProductType.Service)
+        {
+            IEnumerable<ProductComposition> comps = await CompositionQueries.GetByParentProductIdAsync(item.ProductId);
+            foreach (ProductComposition comp in comps)
+            {
+                await RegisterMovementAsync(comp.ChildProductId, comp.Quantity * item.Quantity, MovementType.Loss, $"{reason} (BOM Loss)", updateStockProjection: false);
+            }
+        }
+    }
+
+    private async Task RegisterMovementAsync(Guid productId, decimal quantity, MovementType type, string reason, bool updateStockProjection = true, bool isReturn = false)
+    {
+        StockMovement movement = new StockMovement
+        {
+            ProductId = productId,
+            Quantity = quantity,
+            Type = type,
+            MovementDate = DateTimeOffset.UtcNow,
+            Reason = reason
+        };
+        await StockMovementRepository.AddAsync(movement);
+
+        if (updateStockProjection)
+        {
+            Product? dbProduct = await ProductQueries.GetByIdAsync(productId);
+            if (dbProduct != null)
+            {
+                if (isReturn) dbProduct.CurrentStock += quantity;
+                else dbProduct.CurrentStock -= quantity;
+
+                await ProductRepository.UpdateAsync(dbProduct);
+            }
+        }
+    }
+    #endregion Methods - Exception Workflows (Avaria / Cancel)
+
+}

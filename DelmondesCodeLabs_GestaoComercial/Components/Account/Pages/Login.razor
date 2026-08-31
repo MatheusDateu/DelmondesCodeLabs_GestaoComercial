@@ -1,0 +1,154 @@
+﻿@page "/Account/Login"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject ILogger<Login> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Log in"] - Delmondes CodeLabs</PageTitle>
+
+<!-- Mobile-first margins applied here: mt-8 pt-4 for mobile, mt-md-16 pt-md-16 for desktop -->
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8 pt-4 mt-md-16 pt-md-16">
+    <MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+        <MudCardHeader Class="d-flex justify-center pb-0">
+            <CardHeaderContent>
+                <MudText Typo="Typo.h4" Align="Align.Center" Color="Color.Primary" Style="font-weight: bold; letter-spacing: 1px;">
+                    DELMONDES CODELABS
+                </MudText>
+                <MudText Typo="Typo.subtitle1" Align="Align.Center" Class="mt-2 text-muted">
+                    Gestão Comercial & PDV
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+
+        <MudCardContent>
+            <StatusMessage Message="@_errorMessage" />
+
+            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                <DataAnnotationsValidator />
+
+                <MudGrid>
+                    <MudItem xs="12">
+                        <label style="color: var(--mud-palette-text-secondary); font-size: 12px; font-weight: bold; margin-bottom: 4px; display: block;">@StrLocalizer["Email Address"]</label>
+                        <InputText @bind-Value="Input.Email" type="email" autocomplete="username"
+                                   style="width: 100%; padding: 14px; background: transparent; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; color: var(--mud-palette-text-primary);" />
+                        <ValidationMessage For="() => Input.Email" style="color: var(--mud-palette-error); font-size: 12px; margin-top: 4px;" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <label style="color: var(--mud-palette-text-secondary); font-size: 12px; font-weight: bold; margin-bottom: 4px; display: block;">@StrLocalizer["Password"]</label>
+                        <InputText @bind-Value="Input.Password" type="password" autocomplete="current-password"
+                                   style="width: 100%; padding: 14px; background: transparent; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; color: var(--mud-palette-text-primary);" />
+                        <ValidationMessage For="() => Input.Password" style="color: var(--mud-palette-error); font-size: 12px; margin-top: 4px;" />
+                    </MudItem>
+
+                    <MudItem xs="12" Class="d-flex align-center pb-2">
+                        <InputCheckbox @bind-Value="Input.RememberMe" id="rememberMe" style="width: 18px; height: 18px; accent-color: var(--mud-palette-primary); cursor: pointer;" />
+                        <label for="rememberMe" style="margin-left: 8px; color: var(--mud-palette-text-primary); cursor: pointer;">@StrLocalizer["Remember me"]</label>
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <button type="submit" style="width: 100%; padding: 12px; border-radius: 4px; font-weight: bold; background-color: var(--mud-palette-primary); color: #000000; border: none; cursor: pointer;">
+                            @StrLocalizer["Log in"].ToString().ToUpper()
+                        </button>
+                    </MudItem>
+                </MudGrid>
+            </EditForm>
+        </MudCardContent>
+
+        <MudCardActions Class="d-flex flex-column align-center mt-2 pb-4">
+            <MudLink Href="/Account/ForgotPassword" Typo="Typo.body2" Color="Color.Default" Underline="Underline.Hover">
+                @StrLocalizer["Forgot your password?"]
+            </MudLink>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    #region Fields
+    private string? _errorMessage;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    public async Task LoginUser()
+    {
+        // 1. Busca o usuário pelo E-mail fornecido na tela
+        ApplicationUser? user = await UserManager.FindByEmailAsync(Input.Email);
+
+        if (user is null)
+        {
+            _errorMessage = $"{StrLocalizer["Error"]}: {StrLocalizer["Invalid login attempt."]}";
+            return;
+        }
+
+        // 2. Passa o UserName real do usuário encontrado para o SignInManager
+        SignInResult result = await SignInManager.PasswordSignInAsync(user.UserName!, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User logged in successfully.");
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.RequiresTwoFactor)
+        {
+            RedirectManager.RedirectTo(
+                "/Account/LoginWith2fa",
+                new() { ["ReturnUrl"] = ReturnUrl, ["RememberMe"] = Input.RememberMe });
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out due to multiple failed attempts.");
+            RedirectManager.RedirectTo("/Account/Lockout");
+        }
+        else
+        {
+            _errorMessage = $"{StrLocalizer["Error"]}: {StrLocalizer["Invalid login attempt."]}";
+        }
+    }
+    #endregion Methods
+
+    #region Models
+    public sealed class InputModel
+    {
+        [Required(ErrorMessage = "O endereço de e-mail é obrigatório.")]
+        [EmailAddress(ErrorMessage = "Formato de e-mail inválido.")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "A senha é obrigatória.")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+    }
+    #endregion Models
+
+}

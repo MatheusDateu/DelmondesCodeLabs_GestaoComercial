@@ -1,0 +1,121 @@
+﻿@page "/Account/Manage/DeletePersonalData"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<DeletePersonalData> Logger
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Delete Account & Personal Data"] - Delmondes CodeLabs</PageTitle>
+
+<MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-error); border-radius: 8px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Color="Color.Error" Style="font-weight: bold;">@StrLocalizer["Delete Account & Personal Data"]</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    <MudCardContent>
+        <StatusMessage Message="@message" />
+
+        <MudAlert Severity="Severity.Error" Class="mb-4">
+            <strong>@StrLocalizer["Warning"]:</strong> @StrLocalizer["Deleting this data will permanently remove your account, and this cannot be recovered."]
+        </MudAlert>
+
+        <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post">
+            <DataAnnotationsValidator />
+
+            <MudGrid>
+                <MudItem xs="12" md="8">
+                    @if (requirePassword)
+                    {
+                        <div class="mud-native-input-control">
+                            <label class="mud-native-label">@StrLocalizer["Confirm your Password"]</label>
+                            <InputText @bind-Value="Input.Password" type="password" autocomplete="current-password" class="mud-native-input" />
+                            <ValidationMessage For="() => Input.Password" class="mud-native-error" />
+                        </div>
+                    }
+                    <button type="submit" class="mud-native-btn" style="background-color: var(--mud-palette-error); color: #ffffff;">
+                        @StrLocalizer["Delete Data and Close Account"].ToString().ToUpper()
+                    </button>
+                </MudItem>
+            </MudGrid>
+        </EditForm>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    #region Fields
+    private string? message;
+    private ApplicationUser? user;
+    private bool requirePassword;
+    #endregion Fields
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        requirePassword = await UserManager.HasPasswordAsync(user);
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    private async Task OnValidSubmitAsync()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        if (requirePassword && !await UserManager.CheckPasswordAsync(user, Input.Password))
+        {
+            message = $"{StrLocalizer["Error"]}: {StrLocalizer["Incorrect password."]}";
+            return;
+        }
+
+        IdentityResult result = await UserManager.DeleteAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException("Unexpected error occurred deleting user.");
+        }
+
+        await SignInManager.SignOutAsync();
+
+        string userId = await UserManager.GetUserIdAsync(user);
+        Logger.LogInformation("User with ID '{UserId}' deleted themselves.", userId);
+
+        RedirectManager.RedirectToCurrentPage();
+    }
+    #endregion Methods
+
+    #region Models
+    private sealed class InputModel
+    {
+        [Required(ErrorMessage = "A senha é obrigatória.")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = string.Empty;
+    }
+    #endregion Models
+
+}

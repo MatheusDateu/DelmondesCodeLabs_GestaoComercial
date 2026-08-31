@@ -1,0 +1,83 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudThemeProvider Theme="@DelmondesTheme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>
+    <!-- Renderizes the hamburger menu button only if logged in -->
+    <AuthorizeView Context="AuthContext">
+        <Authorized>
+            <MudAppBar Elevation="1" Color="Color.Dark">
+                <MudTooltip Text="@StrLocalizer["Open menu"]">
+                    <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+                </MudTooltip>
+                <MudText Typo="Typo.h5" Class="ml-3" Color="Color.Primary" Style="font-weight: bold;">
+                    Delmondes CodeLabs
+                </MudText>
+
+                <MudSpacer />
+
+                <MudTooltip Text="@StrLocalizer["User profile"]">
+                    <MudIconButton Href="/Account/Manage" Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" />
+                </MudTooltip>
+            </MudAppBar>
+
+            <MudDrawer @bind-Open="@_drawerOpen" Elevation="2" Variant="DrawerVariant.Responsive">
+                <MudDrawerHeader>
+                    <MudText Typo="Typo.h6">@StrLocalizer["Menu"]</MudText>
+                </MudDrawerHeader>
+                <NavMenu />
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    @StrLocalizer["An unhandled error has occurred."]
+    <a href="." class="reload">@StrLocalizer["Reload"]</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    #region Fields
+    private bool _drawerOpen = true;
+    #endregion Fields
+
+    #region Theme Configuration
+    private MudTheme DelmondesTheme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#03fa6e",
+            AppbarBackground = "#000000",
+            Background = "#ffffff",
+            Surface = "#ffffff",
+            TextPrimary = "#000000",
+            AppbarText = "#ffffff",
+            ActionDefault = "#2a446b",
+            LinesDefault = "#2a446b",
+            HoverOpacity = 0.1,
+            DrawerBackground = "#ffffff",
+            DrawerText = "#000000"
+        }
+    };
+    #endregion Theme Configuration
+
+    #region Methods
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+    #endregion Methods
+
+}

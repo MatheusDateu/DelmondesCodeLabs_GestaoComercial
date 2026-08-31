@@ -1,0 +1,37 @@
+﻿@if (!string.IsNullOrEmpty(DisplayMessage))
+{
+    var severity = DisplayMessage.StartsWith("Error") ? Severity.Error : Severity.Success;
+
+    <MudAlert Severity="@severity" Class="mb-4">
+        @DisplayMessage
+    </MudAlert>
+}
+
+@code {
+    #region Fields
+    private string? messageFromCookie;
+    #endregion Fields
+
+    #region Properties
+    [Parameter]
+    public string? Message { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private string? DisplayMessage => Message ?? messageFromCookie;
+    #endregion Properties
+
+    #region Lifecycle
+    protected override void OnInitialized()
+    {
+        messageFromCookie = HttpContext.Request.Cookies[IdentityRedirectManager.StatusCookieName];
+
+        if (messageFromCookie is not null)
+        {
+            HttpContext.Response.Cookies.Delete(IdentityRedirectManager.StatusCookieName);
+        }
+    }
+    #endregion Lifecycle
+
+}

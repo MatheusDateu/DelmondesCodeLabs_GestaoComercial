@@ -1,0 +1,211 @@
+﻿@page "/Account/Manage/Passkeys"
+
+@using DelmondesCodeLabs_GestaoComercial.Data
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using System.Buffers.Text
+@using Microsoft.Extensions.Localization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityRedirectManager RedirectManager
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Manage Passkeys"] - Delmondes CodeLabs</PageTitle>
+
+<MudCard Elevation="4" Class="pa-6" Style="border-top: 4px solid var(--mud-palette-primary); border-radius: 8px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Style="font-weight: bold;">@StrLocalizer["Manage Your Passkeys"]</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    <MudCardContent>
+        <StatusMessage />
+
+        @if (currentPasskeys is { Count: > 0 })
+        {
+            <MudSimpleTable Style="overflow-x: auto;" Class="mb-6">
+                <tbody>
+                    @foreach (UserPasskeyInfo passkey in currentPasskeys)
+                    {
+                        <tr>
+                            <td class="align-middle">
+                                <MudText Typo="Typo.body1" Style="font-weight: bold;">@(passkey.Name ?? StrLocalizer["Unnamed passkey"])</MudText>
+                            </td>
+                            <td class="text-end align-middle">
+                                @{
+                                    string credentialId = Base64Url.EncodeToString(passkey.CredentialId);
+                                }
+                                <form @formname="@($"update-passkey-{credentialId}")" @onsubmit="UpdatePasskey" method="post" class="d-inline-flex gap-2" data-enhance="false">
+                                    <!-- TOKEN DEVOLVIDO AQUI -->
+                                    <AntiforgeryToken />
+                                    <input type="hidden" name="CredentialId" value="@credentialId" />
+
+                                    <button type="submit" name="Action" value="rename" class="mud-native-btn" style="padding: 6px 16px; background-color: transparent; border: 1px solid var(--mud-palette-primary); color: var(--mud-palette-primary);">
+                                        @StrLocalizer["Rename"]
+                                    </button>
+
+                                    <button type="submit" name="Action" value="delete" class="mud-native-btn" style="padding: 6px 16px; background-color: var(--mud-palette-error); color: #ffffff;">
+                                        @StrLocalizer["Delete"]
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="text-muted mb-6">@StrLocalizer["No passkeys are registered."]</MudText>
+        }
+
+        <form @formname="add-passkey" @onsubmit="AddPasskey" method="post" data-enhance="false">
+            <!-- TOKEN DEVOLVIDO AQUI -->
+            <AntiforgeryToken />
+            @if (currentPasskeys is { Count: >= MaxPasskeyCount })
+            {
+                <MudAlert Severity="Severity.Error">@StrLocalizer["You have reached the maximum number of allowed passkeys. Please delete one before adding a new one."]</MudAlert>
+            }
+            else
+            {
+                <PasskeySubmit Operation="PasskeyOperation.Create" Name="Input" class="mud-native-btn">
+                    @StrLocalizer["Add a new passkey"].ToString().ToUpper()
+                </PasskeySubmit>
+            }
+        </form>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    #region Constants
+    private const int MaxPasskeyCount = 100;
+    #endregion
+
+    #region Fields
+    private ApplicationUser? user;
+    private IList<UserPasskeyInfo>? currentPasskeys;
+    #endregion
+
+    #region Properties
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private string? Action { get; set; }
+
+    [SupplyParameterFromForm]
+    private string? CredentialId { get; set; }
+
+    [SupplyParameterFromForm(FormName = "add-passkey")]
+    private PasskeyInputModel Input { get; set; } = default!;
+    #endregion
+
+    #region Lifecycle
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        user = await UserManager.GetUserAsync(HttpContext.User);
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+        currentPasskeys = await UserManager.GetPasskeysAsync(user);
+    }
+    #endregion
+
+    #region Methods
+    private async Task AddPasskey()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(Input.Error))
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {Input.Error}", HttpContext);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(Input.CredentialJson))
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["The browser did not provide a passkey."]}", HttpContext);
+            return;
+        }
+
+        if (currentPasskeys!.Count >= MaxPasskeyCount)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["You have reached the maximum number of allowed passkeys."]}", HttpContext);
+            return;
+        }
+
+        Microsoft.AspNetCore.Identity.PasskeyAttestationResult attestationResult = await SignInManager.PerformPasskeyAttestationAsync(Input.CredentialJson);
+        if (!attestationResult.Succeeded)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["Could not add the passkey:"]} {attestationResult.Failure.Message}", HttpContext);
+            return;
+        }
+
+        IdentityResult addPasskeyResult = await UserManager.AddOrUpdatePasskeyAsync(user, attestationResult.Passkey);
+        if (!addPasskeyResult.Succeeded)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["The passkey could not be added to your account."]}", HttpContext);
+            return;
+        }
+
+        string credentialIdBase64Url = Base64Url.EncodeToString(attestationResult.Passkey.CredentialId);
+        RedirectManager.RedirectTo($"Account/Manage/RenamePasskey/{credentialIdBase64Url}");
+    }
+
+    private async Task UpdatePasskey()
+    {
+        switch (Action)
+        {
+            case "rename":
+                RedirectManager.RedirectTo($"Account/Manage/RenamePasskey/{CredentialId}");
+                break;
+            case "delete":
+                await DeletePasskey();
+                break;
+            default:
+                RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["Unknown action"]} '{Action}'.", HttpContext);
+                break;
+        }
+    }
+
+    private async Task DeletePasskey()
+    {
+        if (user is null)
+        {
+            RedirectManager.RedirectToInvalidUser(UserManager, HttpContext);
+            return;
+        }
+
+        byte[] credentialId;
+        try
+        {
+            credentialId = Base64Url.DecodeFromChars(CredentialId);
+        }
+        catch (FormatException)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["The specified passkey ID had an invalid format."]}", HttpContext);
+            return;
+        }
+
+        IdentityResult result = await UserManager.RemovePasskeyAsync(user, credentialId);
+        if (!result.Succeeded)
+        {
+            RedirectManager.RedirectToCurrentPageWithStatus($"{StrLocalizer["Error"]}: {StrLocalizer["The passkey could not be deleted."]}", HttpContext);
+            return;
+        }
+
+        RedirectManager.RedirectToCurrentPageWithStatus(StrLocalizer["Passkey deleted successfully."], HttpContext);
+    }
+    #endregion
+
+}

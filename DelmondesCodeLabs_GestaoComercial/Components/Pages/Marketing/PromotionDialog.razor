@@ -1,0 +1,313 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Common
+@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.Localization
+
+@inject IPromotionRepository PromotionRepository
+@inject IProductQueries ProductQueries
+@inject ICategoryQueries CategoryQueries
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Model" OnValidSubmit="OnValidSubmitAsync" id="promotionForm" FormName="PromotionForm">
+            <DataAnnotationsValidator />
+
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Model.Name"
+                                  For="@(() => Model.Name)"
+                                  Label="@StrLocalizer["Promotion Name"]"
+                                  Variant="Variant.Outlined"
+                                  Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudSelect @bind-Value="Model.DiscountType"
+                               For="@(() => Model.DiscountType)"
+                               Label="@StrLocalizer["Discount Type"]"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               Direction="Direction.Bottom"
+                               OffsetY="true">
+                        <MudSelectItem Value="DiscountType.Percentage">@StrLocalizer["Percentage"]</MudSelectItem>
+                        <MudSelectItem Value="DiscountType.FixedValue">@StrLocalizer["Fixed Value"]</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudNumericField @bind-Value="Model.DiscountValue"
+                                     For="@(() => Model.DiscountValue)"
+                                     Label="@(Model.DiscountType == DiscountType.Percentage ? StrLocalizer["Discount (%)"] : StrLocalizer["Discount (Value)"])"
+                                     Variant="Variant.Outlined"
+                                     Format="N2"
+                                     Required="true"
+                                     Min="0.01m"
+                                     Max="@(Model.DiscountType == DiscountType.Percentage ? 100m : decimal.MaxValue)"
+                                     Adornment="@(Model.DiscountType == DiscountType.Percentage ? Adornment.End : Adornment.Start)"
+                                     AdornmentText="@(Model.DiscountType == DiscountType.Percentage ? "%" : "R$")" />
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Class="mb-4" Spacing="2">
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker @bind-Date="_startDate"
+                                   Label="@StrLocalizer["Start Date"]"
+                                   Variant="Variant.Outlined"
+                                   Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTimePicker @bind-Time="_startTime"
+                                   Label="@StrLocalizer["Start Time"]"
+                                   Variant="Variant.Outlined"
+                                   Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker @bind-Date="_endDate"
+                                   Label="@StrLocalizer["End Date"]"
+                                   Variant="Variant.Outlined"
+                                   Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTimePicker @bind-Time="_endTime"
+                                   Label="@StrLocalizer["End Time"]"
+                                   Variant="Variant.Outlined"
+                                   Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="12" Class="d-flex align-center justify-end">
+                    <MudSwitch @bind-Value="Model.IsActive" Color="Color.Primary" Label="@StrLocalizer["Active"]" />
+                </MudItem>
+            </MudGrid>
+
+            <MudDivider Class="mb-4" />
+            <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-2" Style="font-weight: bold;">
+                @StrLocalizer["Add Items to Promotion"]
+            </MudText>
+
+            <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-4 flex-wrap">
+                <MudSelect T="int" @bind-Value="_selectionType" Label="@StrLocalizer["Target Type"]" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 150px;">
+                    <MudSelectItem T="int" Value="0">@StrLocalizer["Product"]</MudSelectItem>
+                    <MudSelectItem T="int" Value="1">@StrLocalizer["Category"]</MudSelectItem>
+                </MudSelect>
+
+                @if (_selectionType == 0)
+                {
+                    <MudSelect T="Guid" @bind-Value="_selectedEntityId" Label="@StrLocalizer["Product"]" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" MaxHeight="200" Direction="Direction.Bottom" OffsetY="true">
+                        <MudSelectItem T="Guid" Value="@Guid.Empty">@StrLocalizer["Select a product"]</MudSelectItem>
+                        @if (_availableProducts is not null)
+                        {
+                            @foreach (Product product in _availableProducts)
+                            {
+                                <MudSelectItem T="Guid" Value="@product.Id">@product.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                }
+                else
+                {
+                    <MudSelect T="Guid" @bind-Value="_selectedEntityId" Label="@StrLocalizer["Category"]" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" MaxHeight="200" Direction="Direction.Bottom" OffsetY="true">
+                        <MudSelectItem T="Guid" Value="@Guid.Empty">@StrLocalizer["Select a category"]</MudSelectItem>
+                        @if (_availableCategories is not null)
+                        {
+                            @foreach (Category category in _availableCategories)
+                            {
+                                <MudSelectItem T="Guid" Value="@category.Id">@category.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddItemToPromotion" Style="color: #000000; font-weight: bold; height: 40px;">
+                    @StrLocalizer["Add"].ToString().ToUpper()
+                </MudButton>
+            </MudStack>
+
+            <MudTable Items="Model.Items" Dense="true" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
+                <HeaderContent>
+                    <MudTh>@StrLocalizer["Type"]</MudTh>
+                    <MudTh>@StrLocalizer["Name"]</MudTh>
+                    <MudTh Style="text-align: right">@StrLocalizer["Actions"]</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="item">
+                    <MudTd DataLabel="@StrLocalizer["Type"]">
+                        <MudChip T="string" Size="Size.Small" Color="@(item.ProductId.HasValue ? Color.Info : Color.Secondary)" Variant="Variant.Text">
+                            @(item.ProductId.HasValue ? StrLocalizer["Product"] : StrLocalizer["Category"])
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="@StrLocalizer["Name"]">
+                        @(item.ProductId.HasValue ? item.Product?.Name : item.Category?.Name)
+                    </MudTd>
+                    <MudTd DataLabel="@StrLocalizer["Actions"]" Style="text-align: right">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" OnClick="@(() => RemoveItemFromPromotion(item))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Class="pa-4 text-center">@StrLocalizer["No items added to this promotion."]</MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@StrLocalizer["Cancel"].ToString().ToUpper()</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" ButtonType="ButtonType.Submit" form="promotionForm" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Save"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Fields
+    private IEnumerable<Product>? _availableProducts;
+    private IEnumerable<Category>? _availableCategories;
+
+    private DateTime? _startDate = DateTime.Today;
+    private TimeSpan? _startTime = new TimeSpan(16, 0, 0); // Defaults to 16:00 (4 PM)
+
+    private DateTime? _endDate = DateTime.Today.AddDays(1);
+    private TimeSpan? _endTime = new TimeSpan(5, 0, 0); // Defaults to 05:00 AM
+
+    // 0 = Product, 1 = Category
+    private int _selectionType = 0;
+    private Guid _selectedEntityId = Guid.Empty;
+    #endregion Fields
+
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Promotion Model { get; set; } = new();
+
+    [Parameter]
+    public bool IsEditing { get; set; }
+    #endregion Parameters
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises dropdown data for products and categories and extracts time parts.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        PagedResult<Product> productResult = await ProductQueries.SearchProductsAsync(null, 1, 5000);
+        _availableProducts = productResult.Items;
+
+        _availableCategories = await CategoryQueries.GetAllActiveAsync();
+
+        if (IsEditing)
+        {
+            DateTime startLocal = Model.StartDate.ToLocalTime().DateTime;
+            _startDate = startLocal.Date;
+            _startTime = startLocal.TimeOfDay;
+
+            DateTime endLocal = Model.EndDate.ToLocalTime().DateTime;
+            _endDate = endLocal.Date;
+            _endTime = endLocal.TimeOfDay;
+        }
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    /// <summary>
+    /// Validates and adds a temporary item to the in-memory promotion list.
+    /// </summary>
+    private void AddItemToPromotion()
+    {
+        if (_selectedEntityId == Guid.Empty)
+        {
+            Snackbar.Add(StrLocalizer["Please select an item."], Severity.Warning);
+            return;
+        }
+
+        bool alreadyExists = _selectionType == 0
+            ? Model.Items.Any(i => i.ProductId == _selectedEntityId)
+            : Model.Items.Any(i => i.CategoryId == _selectedEntityId);
+
+        if (alreadyExists)
+        {
+            Snackbar.Add(StrLocalizer["This item is already in the promotion."], Severity.Warning);
+            return;
+        }
+
+        PromotionItem newItem = new PromotionItem();
+
+        if (_selectionType == 0) // Product
+        {
+            Product? selectedProduct = _availableProducts?.FirstOrDefault(p => p.Id == _selectedEntityId);
+            if (selectedProduct != null)
+            {
+                newItem.ProductId = selectedProduct.Id;
+                newItem.Product = selectedProduct;
+                Model.Items.Add(newItem);
+            }
+        }
+        else // Category
+        {
+            Category? selectedCategory = _availableCategories?.FirstOrDefault(c => c.Id == _selectedEntityId);
+            if (selectedCategory != null)
+            {
+                newItem.CategoryId = selectedCategory.Id;
+                newItem.Category = selectedCategory;
+                Model.Items.Add(newItem);
+            }
+        }
+
+        _selectedEntityId = Guid.Empty;
+    }
+
+    /// <summary>
+    /// Removes an item from the in-memory promotion list.
+    /// </summary>
+    private void RemoveItemFromPromotion(PromotionItem item)
+    {
+        Model.Items.Remove(item);
+    }
+
+    /// <summary>
+    /// Validates the form, combines date and time components safely, and persists the promotion.
+    /// </summary>
+    private async Task OnValidSubmitAsync()
+    {
+        // Combines Date and Time into a local DateTime object safely
+        DateTime startDateTime = DateTime.SpecifyKind(_startDate!.Value.Date.Add(_startTime ?? TimeSpan.Zero), DateTimeKind.Local);
+        DateTime endDateTime = DateTime.SpecifyKind(_endDate!.Value.Date.Add(_endTime ?? TimeSpan.Zero), DateTimeKind.Local);
+
+        if (endDateTime < startDateTime)
+        {
+            Snackbar.Add(StrLocalizer["End date/time must be greater than or equal to start date/time."], Severity.Error);
+            return;
+        }
+
+        if (!Model.Items.Any())
+        {
+            Snackbar.Add(StrLocalizer["You must add at least one item or category to the promotion."], Severity.Warning);
+            return;
+        }
+
+        Model.StartDate = new DateTimeOffset(startDateTime).ToUniversalTime();
+        Model.EndDate = new DateTimeOffset(endDateTime).ToUniversalTime();
+
+        if (IsEditing)
+        {
+            await PromotionRepository.UpdateAsync(Model);
+            Snackbar.Add(StrLocalizer["Promotion updated successfully."], Severity.Success);
+        }
+        else
+        {
+            await PromotionRepository.AddAsync(Model);
+            Snackbar.Add(StrLocalizer["Promotion created successfully."], Severity.Success);
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Cancels the operation and closes the dialogue.
+    /// </summary>
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    #endregion Methods
+
+}

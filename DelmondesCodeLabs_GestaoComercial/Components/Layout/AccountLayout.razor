@@ -1,0 +1,36 @@
+﻿@inherits LayoutComponentBase
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<div class="account-layout-container" style="min-height: 100vh; background-color: var(--mud-palette-background);">
+    <!-- Clean Static Header -->
+    <header style="background-color: var(--mud-palette-appbar-background); color: var(--mud-palette-appbar-text); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <a href="/" style="color: var(--mud-palette-primary); text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid var(--mud-palette-primary); padding: 6px 12px; border-radius: 4px;">
+                ← @StrLocalizer["Back to system"]
+            </a>
+            <h1 style="margin: 0; font-size: 20px; font-weight: bold; color: var(--mud-palette-primary);">Delmondes CodeLabs</h1>
+        </div>
+
+        <!-- Formulário Nativo Seguro de Logout -->
+        <form action="Account/Logout" method="post" class="m-0" data-enhance="false">
+            <AntiforgeryToken />
+            <!-- Apenas remova a barra do value abaixo -->
+            <input type="hidden" name="ReturnUrl" value="" />
+
+            <button type="submit" class="mud-native-btn d-flex align-center gap-2" style="width: auto; padding: 6px 16px; background-color: var(--mud-palette-error); color: #ffffff;">
+                <span class="d-none d-sm-inline">@StrLocalizer["Log out"].ToString().ToUpper()</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="d-sm-none">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+            </button>
+        </form>
+    </header>
+
+    <!-- Main Content -->
+    <main style="padding: 24px;">
+        @Body
+    </main>
+</div>

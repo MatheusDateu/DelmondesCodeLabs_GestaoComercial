@@ -1,0 +1,203 @@
+﻿@using DelmondesCodeLabs_GestaoComercial.Domain.Entities
+@using DelmondesCodeLabs_GestaoComercial.Domain.Interfaces
+@using Microsoft.AspNetCore.Components.Forms
+
+@inject IProductRepository ProductRepository
+@inject ICategoryQueries CategoryQueries
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Model" OnValidSubmit="OnValidSubmitAsync" id="productForm" FormName="ProductForm">
+            <DataAnnotationsValidator />
+
+            <MudTextField @bind-Value="Model.Name"
+                          For="@(() => Model.Name)"
+                          Label="@StrLocalizer["Product Name"]"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          Class="mb-3" />
+
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Model.Sku"
+                                  For="@(() => Model.Sku)"
+                                  Label="@StrLocalizer["SKU"]"
+                                  Variant="Variant.Outlined"
+                                  Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Model.Barcode"
+                                  For="@(() => Model.Barcode)"
+                                  Label="@StrLocalizer["Barcode"]"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="Model.CategoryId"
+                               For="@(() => Model.CategoryId)"
+                               Label="@StrLocalizer["Category"]"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               MaxHeight="200"
+                               Direction="Direction.Bottom"
+                               OffsetY="true">
+                        <MudSelectItem Value="@Guid.Empty">@StrLocalizer["Select a category"]</MudSelectItem>
+                        @if (_categories is not null)
+                        {
+                            @foreach (var category in _categories)
+                            {
+                                <MudSelectItem Value="@category.Id">@category.Name</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="Model.Type"
+                               For="@(() => Model.Type)"
+                               Label="@StrLocalizer["Product Type"]"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               Direction="Direction.Bottom"
+                               OffsetY="true">
+                        @foreach (ProductType type in Enum.GetValues<ProductType>())
+                        {
+                            <MudSelectItem Value="@type">@StrLocalizer[type.ToString()]</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Class="mb-2" Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="Model.CostPrice"
+                                     For="@(() => Model.CostPrice)"
+                                     Label="@StrLocalizer["Cost Price"]"
+                                     Variant="Variant.Outlined"
+                                     Format="N2"
+                                     Required="true"
+                                     Min="0m" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="Model.SellingPrice"
+                                     For="@(() => Model.SellingPrice)"
+                                     Label="@StrLocalizer["Selling Price"]"
+                                     Variant="Variant.Outlined"
+                                     Format="N2"
+                                     Required="true"
+                                     Min="0m" />
+                </MudItem>
+            </MudGrid>
+
+            <MudPaper Elevation="0" Class="pa-3 mb-4" Style="background-color: var(--mud-palette-background-grey);">
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">@StrLocalizer["Profit Margin (Value)"]:</MudText>
+                    <MudText Typo="Typo.subtitle2" Color="Color.Success" Style="font-weight: bold;">
+                        @ProfitValue.ToString("C")
+                    </MudText>
+                </MudStack>
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">@StrLocalizer["Profit Margin (%)"]:</MudText>
+                    <MudText Typo="Typo.subtitle2" Color="Color.Success" Style="font-weight: bold;">
+                        @ProfitPercentage.ToString("N2")%
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+
+            <MudGrid Class="mb-1" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudItem xs="8" sm="6">
+                    <MudNumericField @bind-Value="Model.MinimumStockAlert"
+                                     For="@(() => Model.MinimumStockAlert)"
+                                     Label="@StrLocalizer["Min. Stock Alert"]"
+                                     Variant="Variant.Outlined"
+                                     Format="N3"
+                                     Required="true"
+                                     Min="0m" />
+                </MudItem>
+                <MudItem xs="4" sm="6" Class="d-flex justify-end">
+                    <MudSwitch @bind-Value="Model.IsActive" Color="Color.Primary" Label="@StrLocalizer["Active"]" />
+                </MudItem>
+            </MudGrid>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@StrLocalizer["Cancel"].ToString().ToUpper()</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" ButtonType="ButtonType.Submit" form="productForm" Style="color: #000000; font-weight: bold;">
+            @StrLocalizer["Save"].ToString().ToUpper()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    #region Fields
+    private IEnumerable<Category>? _categories;
+    #endregion Fields
+
+    #region Parameters
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Product Model { get; set; } = new();
+
+    [Parameter]
+    public bool IsEditing { get; set; }
+    #endregion Parameters
+
+    #region Computed Properties
+    private decimal ProfitValue => Model.SellingPrice - Model.CostPrice;
+
+    private decimal ProfitPercentage => Model.CostPrice > 0
+            ? (ProfitValue / Model.CostPrice) * 100
+            : 0;
+    #endregion Computed Properties
+
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the component and loads the available categories for the dropdown selection.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryQueries.GetAllActiveAsync();
+    }
+    #endregion Lifecycle
+
+    #region Methods
+    /// <summary>
+    /// Processes the submission of the product form, delegating to the appropriate repository command.
+    /// </summary>
+    private async Task OnValidSubmitAsync()
+    {
+        if (Model.CategoryId == Guid.Empty)
+        {
+            Snackbar.Add(@StrLocalizer["Please select a valid category."], Severity.Warning);
+            return;
+        }
+
+        if (IsEditing)
+        {
+            await ProductRepository.UpdateAsync(Model);
+            Snackbar.Add(@StrLocalizer["Product updated successfully."], Severity.Success);
+        }
+        else
+        {
+            await ProductRepository.AddAsync(Model);
+            Snackbar.Add(@StrLocalizer["Product created successfully."], Severity.Success);
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    /// <summary>
+    /// Cancels the operation and closes the dialogue without saving.
+    /// </summary>
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    #endregion Methods
+
+}

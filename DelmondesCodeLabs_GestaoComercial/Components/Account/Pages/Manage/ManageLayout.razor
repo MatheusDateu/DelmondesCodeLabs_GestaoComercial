@@ -1,0 +1,33 @@
+﻿@inherits LayoutComponentBase
+@layout DelmondesCodeLabs_GestaoComercial.Components.Layout.AccountLayout
+@using Microsoft.Extensions.Localization
+
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-6 flex-wrap">
+        <div>
+            <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;">
+                @StrLocalizer["Account Management"]
+            </MudText>
+            <MudText Typo="Typo.subtitle1" Class="text-muted">
+                @StrLocalizer["Change your account settings and manage preferences."]
+            </MudText>
+        </div>
+
+        <!-- Button to return to the interactive system -->
+        <MudButton Href="/" Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack">
+            @StrLocalizer["Back to system"]
+        </MudButton>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <!-- This menu will now use MudBlazor styling correctly -->
+            <ManageNavMenu />
+        </MudItem>
+        <MudItem xs="12" md="9">
+            @Body
+        </MudItem>
+    </MudGrid>
+</MudContainer>

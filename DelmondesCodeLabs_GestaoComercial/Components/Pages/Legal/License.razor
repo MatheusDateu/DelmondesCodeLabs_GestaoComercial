@@ -1,0 +1,61 @@
+﻿@page "/Legal/License"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Localization
+@using DelmondesCodeLabs_GestaoComercial.Resources
+
+@attribute [AllowAnonymous]
+@inject IStringLocalizer<DelmondesCodeLabs_GestaoComercial.Resources.App> StrLocalizer
+
+<PageTitle>@StrLocalizer["Software License Agreement"] - Delmondes CodeLabs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8 mb-16">
+    <MudPaper Elevation="4" Class="pa-8" Style="border-radius: 8px;">
+        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: bold;" Class="mb-6">
+            @StrLocalizer["Software License Agreement"]
+        </MudText>
+
+        <MudText Typo="Typo.body1" Class="mb-4 text-muted">
+            @StrLocalizer["Effective Date:"] @DateTime.Now.ToString("dd/MM/yyyy")
+        </MudText>
+
+        <MudText Typo="Typo.h6" Style="font-weight: bold;" Class="mt-6 mb-2">1. @StrLocalizer["Grant of License"]</MudText>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            @StrLocalizer["Delmondes CodeLabs grants the client a non-exclusive, non-transferable license to operate the Gestão Comercial software. The scope of this license is strictly bound to the commercial plan acquired (Super, Lifetime, or Custom)."]
+        </MudText>
+
+        <MudText Typo="Typo.h6" Style="font-weight: bold;" Class="mt-6 mb-2">2. @StrLocalizer["Source Code Terms (Lifetime Plan Exclusive)"]</MudText>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            @StrLocalizer["Clients who acquire the Lifetime Plan are granted access to the software's source code for the sole purpose of implementing internal operational improvements. However, this access is subject to strict ethical and legal limitations:"]
+        </MudText>
+        <ul style="margin-bottom: 16px; margin-left: 20px;">
+            <li><MudText Typo="Typo.body2"><strong>@StrLocalizer["Resale Ban:"]</strong> @StrLocalizer["The client is strictly prohibited from pirating, copying, reselling, redistributing, or using the source code to create derivative products for commercial gain."]</MudText></li>
+            <li><MudText Typo="Typo.body2"><strong>@StrLocalizer["SuperUser Integrity:"]</strong> @StrLocalizer["The master administrator account (SuperUser) belonging to Delmondes CodeLabs MUST NOT be removed, disabled, or tampered with under any circumstances."]</MudText></li>
+            <li><MudText Typo="Typo.body2"><strong>@StrLocalizer["Warranty Void:"]</strong> @StrLocalizer["Any custom modifications made to the source code by the client or third parties immediately void the unlimited bug fix warranty provided by Delmondes CodeLabs."]</MudText></li>
+        </ul>
+
+        <MudText Typo="Typo.h6" Style="font-weight: bold;" Class="mt-6 mb-2">3. @StrLocalizer["Data Protection (LGPD)"]</MudText>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            @StrLocalizer["In compliance with the Brazilian General Data Protection Law (LGPD - Law No. 13.709/2018), Delmondes CodeLabs guarantees that all personal data processed within the local server environments remains the sole responsibility of the contracting establishment. We do not harvest, sell, or monitor customer operational data."]
+        </MudText>
+
+        <MudDivider Class="my-8" />
+
+        <MudText Typo="Typo.body2" Align="Align.Center" Class="text-muted">
+            @StrLocalizer["For legal inquiries, please contact:"] <a href="mailto:contato@delmondescodelabs.dpdns.org">contato@delmondescodelabs.dpdns.org</a>
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    #region Lifecycle
+    /// <summary>
+    /// Initialises the component.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+    #endregion Lifecycle
+
+}
